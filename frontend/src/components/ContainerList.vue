@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import {
     Play,
     Square,
@@ -9,7 +9,7 @@ import {
     Search,
     RefreshCw
 } from 'lucide-vue-next';
-import { dockerApi } from '../api';
+import { dockerApi, getWsUrl } from '../api';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -18,6 +18,18 @@ dayjs.extend(relativeTime);
 const containers = ref<any[]>([]);
 const loading = ref(true);
 const searchQuery = ref('');
+const activeContainer = ref<any | null>(null);
+
+const showLogsModal = ref(false);
+const logsOutput = ref('');
+const logsEl = ref<HTMLElement | null>(null);
+let logsSocket: WebSocket | null = null;
+
+const showTerminalModal = ref(false);
+const terminalOutput = ref('');
+const terminalInput = ref('');
+const terminalEl = ref<HTMLElement | null>(null);
+let terminalSocket: WebSocket | null = null;
 
 const fetchContainers = async () => {
     try {
@@ -28,6 +40,85 @@ const fetchContainers = async () => {
     } finally {
         loading.value = false;
     }
+};
+
+const filteredContainers = computed(() => {
+    const query = searchQuery.value.trim().toLowerCase();
+    if (!query) return containers.value;
+
+    return containers.value.filter((container) => {
+        const name = container.Names?.[0]?.replace('/', '').toLowerCase() || '';
+        const image = (container.Image || '').toLowerCase();
+        const id = (container.Id || '').toLowerCase();
+        return name.includes(query) || image.includes(query) || id.includes(query);
+    });
+});
+
+const scrollToBottom = async (target: 'logs' | 'terminal') => {
+    await nextTick();
+    const el = target === 'logs' ? logsEl.value : terminalEl.value;
+    if (el) el.scrollTop = el.scrollHeight;
+};
+
+const appendLogs = (text: string) => {
+    logsOutput.value += text;
+    scrollToBottom('logs');
+};
+
+const appendTerminal = (text: string) => {
+    terminalOutput.value += text;
+    scrollToBottom('terminal');
+};
+
+const closeLogs = () => {
+    showLogsModal.value = false;
+    if (logsSocket) {
+        logsSocket.close();
+        logsSocket = null;
+    }
+};
+
+const closeTerminal = () => {
+    showTerminalModal.value = false;
+    if (terminalSocket) {
+        terminalSocket.close();
+        terminalSocket = null;
+    }
+};
+
+const openLogs = (container: any) => {
+    closeLogs();
+    activeContainer.value = container;
+    logsOutput.value = '';
+    showLogsModal.value = true;
+
+    logsSocket = new WebSocket(getWsUrl(`/logs/${container.Id}`));
+    logsSocket.onopen = () => appendLogs(`[connected] Streaming logs for ${container.Names?.[0]?.replace('/', '')}\n`);
+    logsSocket.onmessage = (event) => appendLogs(String(event.data));
+    logsSocket.onerror = () => appendLogs('\n[error] Failed to read logs stream.\n');
+    logsSocket.onclose = () => appendLogs('\n[closed] Log stream closed.\n');
+};
+
+const openTerminal = (container: any) => {
+    closeTerminal();
+    activeContainer.value = container;
+    terminalOutput.value = '';
+    terminalInput.value = '';
+    showTerminalModal.value = true;
+
+    terminalSocket = new WebSocket(getWsUrl(`/terminal/${container.Id}`));
+    terminalSocket.onopen = () => appendTerminal(`[connected] Terminal attached to ${container.Names?.[0]?.replace('/', '')}\n`);
+    terminalSocket.onmessage = (event) => appendTerminal(String(event.data));
+    terminalSocket.onerror = () => appendTerminal('\n[error] Terminal connection failed.\n');
+    terminalSocket.onclose = () => appendTerminal('\n[closed] Terminal disconnected.\n');
+};
+
+const sendTerminalInput = () => {
+    if (!terminalInput.value.trim() || !terminalSocket || terminalSocket.readyState !== WebSocket.OPEN) {
+        return;
+    }
+    terminalSocket.send(`${terminalInput.value}\n`);
+    terminalInput.value = '';
 };
 
 const handleAction = async (action: string, id: string) => {
@@ -59,6 +150,8 @@ onMounted(() => {
 
 onUnmounted(() => {
     clearInterval(interval);
+    closeLogs();
+    closeTerminal();
 });
 </script>
 
@@ -88,7 +181,7 @@ onUnmounted(() => {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr v-for="container in containers" :key="container.Id">
+                    <tr v-for="container in filteredContainers" :key="container.Id">
                         <td class="name-cell">
                             <div class="container-name">
                                 {{ container.Names[0].replace('/', '') }}
@@ -120,10 +213,10 @@ onUnmounted(() => {
                                     @click="handleAction('stop', container.Id)">
                                     <Square :size="16" />
                                 </button>
-                                <button class="btn-icon btn-ghost" title="Logs">
+                                <button class="btn-icon btn-ghost" title="Logs" @click="openLogs(container)">
                                     <FileText :size="16" />
                                 </button>
-                                <button class="btn-icon btn-ghost" title="Terminal">
+                                <button class="btn-icon btn-ghost" title="Terminal" @click="openTerminal(container)">
                                     <Terminal :size="16" />
                                 </button>
                                 <button class="btn-icon btn-ghost text-danger" title="Remove"
@@ -133,11 +226,40 @@ onUnmounted(() => {
                             </div>
                         </td>
                     </tr>
-                    <tr v-if="containers.length === 0 && !loading">
+                    <tr v-if="filteredContainers.length === 0 && !loading">
                         <td colspan="6" class="empty-state">No containers found</td>
                     </tr>
                 </tbody>
             </table>
+        </div>
+
+        <div v-if="showLogsModal" class="modal-backdrop" @click.self="closeLogs">
+            <div class="modal-panel glass-panel">
+                <div class="modal-header">
+                    <h3>Logs: {{ activeContainer?.Names?.[0]?.replace('/', '') }}</h3>
+                    <button class="btn btn-ghost" @click="closeLogs">Close</button>
+                </div>
+                <pre ref="logsEl" class="terminal-output">{{ logsOutput }}</pre>
+            </div>
+        </div>
+
+        <div v-if="showTerminalModal" class="modal-backdrop" @click.self="closeTerminal">
+            <div class="modal-panel glass-panel">
+                <div class="modal-header">
+                    <h3>Terminal: {{ activeContainer?.Names?.[0]?.replace('/', '') }}</h3>
+                    <button class="btn btn-ghost" @click="closeTerminal">Close</button>
+                </div>
+                <pre ref="terminalEl" class="terminal-output">{{ terminalOutput }}</pre>
+                <div class="terminal-input-row">
+                    <input
+                        v-model="terminalInput"
+                        type="text"
+                        placeholder="Type command and press Enter..."
+                        @keyup.enter="sendTerminalInput"
+                    />
+                    <button class="btn btn-ghost" @click="sendTerminalInput">Send</button>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -294,5 +416,65 @@ onUnmounted(() => {
     padding: 80px 0;
     text-align: center;
     color: var(--text-muted);
+}
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-panel {
+    width: min(980px, 95vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.terminal-output {
+    height: 60vh;
+    margin: 0;
+    padding: 12px;
+    overflow: auto;
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    background: #0b1220;
+    color: #d1d5db;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.terminal-input-row {
+    display: flex;
+    gap: 8px;
+}
+
+.terminal-input-row input {
+    flex: 1;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    border-radius: 8px;
+    padding: 10px 12px;
+    outline: none;
 }
 </style>

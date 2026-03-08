@@ -3,12 +3,9 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import {
     Container,
     Box,
-    Cpu,
-    Activity,
     HardDrive,
     TrendingUp
 } from 'lucide-vue-next';
-import { dockerApi } from '../api';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -43,13 +40,13 @@ const labels = ref<string[]>([]);
 const maxDataPoints = 20;
 
 const chartData = computed(() => ({
-    labels: labels.value,
+    labels: [...labels.value],
     datasets: [
         {
             label: 'CPU Usage (%)',
             backgroundColor: 'rgba(99, 102, 241, 0.2)',
             borderColor: '#6366f1',
-            data: cpuData.value,
+            data: [...cpuData.value],
             fill: true,
             tension: 0.4,
             pointRadius: 0
@@ -58,7 +55,7 @@ const chartData = computed(() => ({
             label: 'RAM Usage (%)',
             backgroundColor: 'rgba(16, 185, 129, 0.2)',
             borderColor: '#10b981',
-            data: memData.value,
+            data: [...memData.value],
             fill: true,
             tension: 0.4,
             pointRadius: 0
