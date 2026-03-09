@@ -458,8 +458,8 @@ watch(totalPages, (maxPage) => {
 }
 
 .action-neutral:hover {
-    background: rgba(99, 102, 241, 0.12);
-    border-color: rgba(99, 102, 241, 0.45);
+    background: rgba(36, 150, 237, 0.12);
+    border-color: rgba(36, 150, 237, 0.45);
 }
 
 .action-start {

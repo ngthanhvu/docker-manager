@@ -155,8 +155,8 @@ const chartData = computed(() => ({
     datasets: [
         {
             label: 'CPU Usage (%)',
-            backgroundColor: 'rgba(99, 102, 241, 0.2)',
-            borderColor: '#6366f1',
+            backgroundColor: 'rgba(36, 150, 237, 0.2)',
+            borderColor: '#2496ed',
             data: [...cpuData.value],
             fill: true,
             tension: 0.4,
@@ -360,8 +360,8 @@ onUnmounted(() => {
 }
 
 .icon-box.indigo {
-    background: rgba(99, 102, 241, 0.1);
-    color: #6366f1;
+    background: rgba(36, 150, 237, 0.12);
+    color: #2496ed;
 }
 
 .icon-box.emerald {

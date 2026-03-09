@@ -1,8 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap');
 
 :root {
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
+  --primary: #2496ed;
+  --primary-hover: #1d63ed;
   --bg-dark: #0f172a;
   --bg-card: rgba(30, 41, 59, 0.7);
   --text-main: #f8fafc;
@@ -71,7 +71,7 @@ h4 {
 .btn-primary:hover {
   background: var(--primary-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  box-shadow: 0 4px 12px rgba(36, 150, 237, 0.4);
 }
 
 .btn-ghost {
@@ -80,8 +80,8 @@ h4 {
 }
 
 .btn-ghost:hover {
-  background: rgba(99, 102, 241, 0.12);
-  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(36, 150, 237, 0.12);
+  border-color: rgba(36, 150, 237, 0.4);
   color: var(--text-main);
   transform: translateY(-1px);
 }
@@ -98,7 +98,7 @@ h4 {
 }
 
 .btn-icon.btn-ghost:hover {
-  background: rgba(99, 102, 241, 0.14);
+  background: rgba(36, 150, 237, 0.14);
 }
 
 .btn-icon.text-danger,

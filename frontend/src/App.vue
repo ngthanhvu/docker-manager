@@ -7,7 +7,6 @@ import {
   HardDrive,
   Network,
   Layers,
-  Activity,
   Cpu,
   Database
 } from 'lucide-vue-next';
@@ -56,7 +55,7 @@ onMounted(() => {
     <!-- Sidebar -->
     <aside class="sidebar glass-panel">
       <div class="logo">
-        <Activity class="icon-primary" :size="32" />
+        <i class="fa-brands fa-docker logo-whale" aria-hidden="true"></i>
         <span>Docker Hub</span>
       </div>
 
@@ -117,8 +116,8 @@ onMounted(() => {
   display: flex;
   height: 100vh;
   width: 100vw;
-  background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.05), transparent),
-    radial-gradient(circle at bottom left, rgba(79, 70, 229, 0.05), transparent);
+  background: radial-gradient(circle at top right, rgba(36, 150, 237, 0.08), transparent),
+    radial-gradient(circle at bottom left, rgba(29, 99, 237, 0.07), transparent);
 }
 
 .sidebar {
@@ -142,9 +141,11 @@ onMounted(() => {
   color: white;
 }
 
-.icon-primary {
-  color: var(--primary);
-  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5));
+.logo-whale {
+  font-size: 30px;
+  color: #2496ed;
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(36, 150, 237, 0.5));
 }
 
 .nav-links {
@@ -178,7 +179,7 @@ onMounted(() => {
 .nav-item.active {
   background: var(--primary);
   color: white;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 12px rgba(36, 150, 237, 0.32);
 }
 
 .sidebar-footer {
