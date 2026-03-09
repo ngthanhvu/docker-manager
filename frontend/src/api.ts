@@ -1,8 +1,20 @@
 import axios from 'axios';
+import { watch } from 'vue';
+import { appSettings } from './ui/settings';
+
+const normalizeBase = (raw: string) => raw.replace(/\/+$/, '');
+const getApiBase = () => `${normalizeBase(appSettings.runtime.apiBaseUrl)}/api`;
 
 const api = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  baseURL: getApiBase(),
 });
+
+watch(
+  () => appSettings.runtime.apiBaseUrl,
+  () => {
+    api.defaults.baseURL = getApiBase();
+  }
+);
 
 export const dockerApi = {
   // Containers
@@ -40,5 +52,7 @@ export const dockerApi = {
 };
 
 export const getWsUrl = (path: string) => {
-  return `ws://localhost:8080/ws${path}`;
+  const url = new URL(normalizeBase(appSettings.runtime.apiBaseUrl));
+  const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${wsProtocol}//${url.host}/ws${path}`;
 };

@@ -10,6 +10,8 @@ import {
     RefreshCw
 } from 'lucide-vue-next';
 import { dockerApi, getWsUrl } from '../api';
+import { feedback } from '../ui/feedback';
+import { appSettings } from '../ui/settings';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -89,15 +91,24 @@ const toggleSelectAllPage = () => {
 
 const bulkDelete = async () => {
     if (selectedIds.value.length === 0) return;
-    if (!confirm(`Remove ${selectedIds.value.length} selected container(s)?`)) return;
+    const removeCount = selectedIds.value.length;
+    const accepted = await feedback.confirmAction({
+        title: 'Delete Containers',
+        message: `Remove ${removeCount} selected container(s)? This action cannot be undone.`,
+        confirmText: 'Delete',
+        danger: true,
+        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
+    });
+    if (!accepted) return;
     try {
         for (const id of selectedIds.value) {
             await dockerApi.removeContainer(id);
         }
         selectedIds.value = [];
         await fetchContainers();
+        feedback.success(`Deleted ${removeCount} container(s) successfully.`);
     } catch (err) {
-        alert(`Bulk delete failed: ${err}`);
+        feedback.error(`Bulk delete failed: ${err}`);
     }
 };
 
@@ -173,14 +184,23 @@ const handleAction = async (action: string, id: string) => {
         if (action === 'start') await dockerApi.startContainer(id);
         else if (action === 'stop') await dockerApi.stopContainer(id);
         else if (action === 'remove') {
-            if (confirm('Are you sure you want to remove this container?')) {
-                await dockerApi.removeContainer(id);
-                selectedIds.value = selectedIds.value.filter((x) => x !== id);
-            } else return;
+            const accepted = await feedback.confirmAction({
+                title: 'Delete Container',
+                message: 'Are you sure you want to remove this container?',
+                confirmText: 'Delete',
+                danger: true,
+                requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
+            });
+            if (!accepted) return;
+            await dockerApi.removeContainer(id);
+            selectedIds.value = selectedIds.value.filter((x) => x !== id);
         }
         await fetchContainers();
+        if (action === 'start') feedback.success('Container started successfully.');
+        else if (action === 'stop') feedback.success('Container stopped successfully.');
+        else if (action === 'remove') feedback.success('Container removed successfully.');
     } catch (err) {
-        alert(`Action failed: ${err}`);
+        feedback.error(`Action failed: ${err}`);
     }
 };
 
@@ -191,9 +211,16 @@ const getStatusColor = (status: string) => {
 };
 
 let interval: any;
+const setupInterval = () => {
+    if (interval) clearInterval(interval);
+    const ms = appSettings.general.autoRefreshMs;
+    if (ms > 0) {
+        interval = setInterval(fetchContainers, ms);
+    }
+};
 onMounted(() => {
     fetchContainers();
-    interval = setInterval(fetchContainers, 5000);
+    setupInterval();
 });
 
 onUnmounted(() => {
@@ -217,6 +244,10 @@ watch(totalPages, (maxPage) => {
 watch(filteredContainers, (list) => {
     const valid = new Set(list.map((c) => c.Id));
     selectedIds.value = selectedIds.value.filter((id) => valid.has(id));
+});
+
+watch(() => appSettings.general.autoRefreshMs, () => {
+    setupInterval();
 });
 </script>
 

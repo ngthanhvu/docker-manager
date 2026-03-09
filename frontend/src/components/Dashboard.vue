@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import {
     Container,
     Box,
@@ -19,6 +19,7 @@ import {
     Filler
 } from 'chart.js';
 import { Line } from 'vue-chartjs';
+import { appSettings } from '../ui/settings';
 
 ChartJS.register(
     CategoryScale,
@@ -161,8 +162,17 @@ const chartOptions = {
 
 // Simulate real-time data since the backend /info doesn't provide dynamic CPU/RAM over time yet
 let interval: any;
+const setupInterval = () => {
+    clearInterval(interval);
+    const ms = appSettings.general.autoRefreshMs;
+    if (ms > 0) {
+        interval = setInterval(updateCharts, ms);
+    }
+};
 const updateCharts = () => {
-    const now = new Date().toLocaleTimeString();
+    const now = new Date().toLocaleTimeString([], {
+        hour12: appSettings.general.timeFormat === '12h',
+    });
     labels.value.push(now);
 
     // Simulated dynamic data
@@ -178,11 +188,15 @@ const updateCharts = () => {
 
 onMounted(() => {
     updateCharts();
-    interval = setInterval(updateCharts, 2000);
+    setupInterval();
 });
 
 onUnmounted(() => {
     clearInterval(interval);
+});
+
+watch(() => appSettings.general.autoRefreshMs, () => {
+    setupInterval();
 });
 </script>
 

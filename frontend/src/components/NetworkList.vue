@@ -2,6 +2,8 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { Network, Trash2, RefreshCw } from 'lucide-vue-next';
 import { dockerApi } from '../api';
+import { feedback } from '../ui/feedback';
+import { appSettings } from '../ui/settings';
 
 const networks = ref<any[]>([]);
 const loading = ref(true);
@@ -23,27 +25,44 @@ const fetchNetworks = async () => {
 };
 
 const removeNetwork = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this network?')) return;
+    const accepted = await feedback.confirmAction({
+        title: 'Delete Network',
+        message: 'Are you sure you want to remove this network?',
+        confirmText: 'Delete',
+        danger: true,
+        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
+    });
+    if (!accepted) return;
     try {
         await dockerApi.removeNetwork(id);
         selectedIds.value = selectedIds.value.filter((x) => x !== id);
         await fetchNetworks();
+        feedback.success('Network removed successfully.');
     } catch (err) {
-        alert(`Failed to remove network: ${err}`);
+        feedback.error(`Failed to remove network: ${err}`);
     }
 };
 
 const bulkDelete = async () => {
     if (selectedIds.value.length === 0) return;
-    if (!confirm(`Remove ${selectedIds.value.length} selected network(s)?`)) return;
+    const removeCount = selectedIds.value.length;
+    const accepted = await feedback.confirmAction({
+        title: 'Delete Networks',
+        message: `Remove ${removeCount} selected network(s)? This action cannot be undone.`,
+        confirmText: 'Delete',
+        danger: true,
+        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
+    });
+    if (!accepted) return;
     try {
         for (const id of selectedIds.value) {
             await dockerApi.removeNetwork(id);
         }
         selectedIds.value = [];
         await fetchNetworks();
+        feedback.success(`Deleted ${removeCount} network(s) successfully.`);
     } catch (err) {
-        alert(`Bulk delete failed: ${err}`);
+        feedback.error(`Bulk delete failed: ${err}`);
     }
 };
 

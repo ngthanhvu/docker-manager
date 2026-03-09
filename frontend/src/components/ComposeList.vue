@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Play, RefreshCw, RotateCw, Search, Square, Trash2 } from 'lucide-vue-next';
 import { dockerApi } from '../api';
+import { feedback } from '../ui/feedback';
+import { appSettings } from '../ui/settings';
 
 type ComposeService = {
     id: string;
@@ -47,7 +49,7 @@ const files = ref<ComposeProjectFile[]>([]);
 const loadingFiles = ref(false);
 
 const logsOutput = ref('');
-const logsTail = ref(300);
+const logsTail = ref(appSettings.runtime.defaultLogTail);
 const loadingLogs = ref(false);
 const logsPanel = ref<HTMLElement | null>(null);
 const serviceActionLoadingId = ref('');
@@ -108,7 +110,14 @@ const selectProject = async (projectName: string) => {
 const runAction = async (action: 'start' | 'stop' | 'restart' | 'down', projectName: string) => {
     try {
         if (action === 'down') {
-            if (!confirm(`Bring down compose project "${projectName}"? This removes containers.`)) return;
+            const accepted = await feedback.confirmAction({
+                title: 'Bring Down Compose',
+                message: `Bring down compose project "${projectName}"? This will remove project containers.`,
+                confirmText: 'Down',
+                danger: true,
+                requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
+            });
+            if (!accepted) return;
             await dockerApi.downComposeProject(projectName);
         } else if (action === 'start') {
             await dockerApi.startComposeProject(projectName);
@@ -121,8 +130,12 @@ const runAction = async (action: 'start' | 'stop' | 'restart' | 'down', projectN
         if (selectedProjectName.value) {
             await loadDetails(selectedProjectName.value);
         }
+        if (action === 'start') feedback.success(`Compose "${projectName}" started successfully.`);
+        else if (action === 'stop') feedback.success(`Compose "${projectName}" stopped successfully.`);
+        else if (action === 'restart') feedback.success(`Compose "${projectName}" restarted successfully.`);
+        else feedback.success(`Compose "${projectName}" down successfully.`);
     } catch (err) {
-        alert(`Compose action failed: ${err}`);
+        feedback.error(`Compose action failed: ${err}`);
     }
 };
 
@@ -145,8 +158,10 @@ const runServiceAction = async (action: 'start' | 'stop' | 'restart', service: C
         if (selectedProjectName.value) {
             await loadDetails(selectedProjectName.value);
         }
+        const actionLabel = action === 'start' ? 'started' : action === 'stop' ? 'stopped' : 'restarted';
+        feedback.success(`Service "${service.name}" ${actionLabel} successfully.`);
     } catch (err) {
-        alert(`Service action failed: ${err}`);
+        feedback.error(`Service action failed: ${err}`);
     } finally {
         serviceActionLoadingId.value = '';
     }
@@ -166,22 +181,36 @@ const getServiceClass = (state: string) => {
 
 let projectsInterval: any;
 let logsInterval: any;
+const setupIntervals = () => {
+    clearInterval(projectsInterval);
+    clearInterval(logsInterval);
+    const ms = appSettings.runtime.composeRefreshMs;
+    if (ms <= 0) return;
+    projectsInterval = setInterval(fetchProjects, ms);
+    logsInterval = setInterval(() => {
+        if (selectedProjectName.value) fetchLogs(selectedProjectName.value);
+    }, ms);
+};
 
 onMounted(async () => {
     await fetchProjects();
     if (selectedProjectName.value) {
         await loadDetails(selectedProjectName.value);
     }
-
-    projectsInterval = setInterval(fetchProjects, 5000);
-    logsInterval = setInterval(() => {
-        if (selectedProjectName.value) fetchLogs(selectedProjectName.value);
-    }, 2000);
+    setupIntervals();
 });
 
 onUnmounted(() => {
     clearInterval(projectsInterval);
     clearInterval(logsInterval);
+});
+
+watch(() => appSettings.runtime.composeRefreshMs, () => {
+    setupIntervals();
+});
+
+watch(() => appSettings.runtime.defaultLogTail, (next) => {
+    logsTail.value = next;
 });
 </script>
 

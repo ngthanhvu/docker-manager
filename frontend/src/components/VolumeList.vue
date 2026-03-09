@@ -2,6 +2,8 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { HardDrive, Trash2, RefreshCw } from 'lucide-vue-next';
 import { dockerApi } from '../api';
+import { feedback } from '../ui/feedback';
+import { appSettings } from '../ui/settings';
 import dayjs from 'dayjs';
 
 const volumes = ref<any[]>([]);
@@ -24,27 +26,44 @@ const fetchVolumes = async () => {
 };
 
 const removeVolume = async (name: string) => {
-    if (!confirm('Are you sure you want to remove this volume?')) return;
+    const accepted = await feedback.confirmAction({
+        title: 'Delete Volume',
+        message: 'Are you sure you want to remove this volume?',
+        confirmText: 'Delete',
+        danger: true,
+        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
+    });
+    if (!accepted) return;
     try {
         await dockerApi.removeVolume(name);
         selectedNames.value = selectedNames.value.filter((x) => x !== name);
         await fetchVolumes();
+        feedback.success('Volume removed successfully.');
     } catch (err) {
-        alert(`Failed to remove volume: ${err}`);
+        feedback.error(`Failed to remove volume: ${err}`);
     }
 };
 
 const bulkDelete = async () => {
     if (selectedNames.value.length === 0) return;
-    if (!confirm(`Remove ${selectedNames.value.length} selected volume(s)?`)) return;
+    const removeCount = selectedNames.value.length;
+    const accepted = await feedback.confirmAction({
+        title: 'Delete Volumes',
+        message: `Remove ${removeCount} selected volume(s)? This action cannot be undone.`,
+        confirmText: 'Delete',
+        danger: true,
+        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
+    });
+    if (!accepted) return;
     try {
         for (const name of selectedNames.value) {
             await dockerApi.removeVolume(name);
         }
         selectedNames.value = [];
         await fetchVolumes();
+        feedback.success(`Deleted ${removeCount} volume(s) successfully.`);
     } catch (err) {
-        alert(`Bulk delete failed: ${err}`);
+        feedback.error(`Bulk delete failed: ${err}`);
     }
 };
 
