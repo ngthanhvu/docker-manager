@@ -104,7 +104,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     <aside class="sidebar glass-panel">
       <div class="logo">
         <i class="fa-brands fa-docker logo-whale" aria-hidden="true"></i>
-        <span>Docker Hub</span>
+        <span>Dock Manager</span>
       </div>
 
       <nav class="nav-links">
@@ -185,7 +185,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   font-weight: 700;
   margin-bottom: 40px;
   padding: 0 8px;

@@ -1,0 +1,25 @@
+services:
+  backend:
+    image: docker-manager-backend:prod-build
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.prod
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    ports:
+      - "8080:8080"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      - ../:/root/stsbmt:ro
+    restart: always
+
+  frontend:
+    image: docker-manager-frontend:prod-build
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.prod
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: always

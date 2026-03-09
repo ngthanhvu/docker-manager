@@ -1,25 +1,12 @@
-# Build stage
-FROM node:22-alpine AS builder
+FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy package.json and lock file
-COPY frontend/package.json frontend/yarn.lock ./
-RUN yarn install
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile
 
-# Copy the rest of the source code
-COPY frontend/ ./
+COPY . .
 
-# Build the application
-RUN yarn build
+EXPOSE 5173
 
-# Final stage
-FROM nginx:stable-alpine
-
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Expose the frontend port
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["yarn", "dev", "--host", "0.0.0.0", "--port", "5173"]
