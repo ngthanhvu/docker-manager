@@ -20,7 +20,7 @@ import ComposeList from './components/ComposeList.vue';
 
 const activeTab = ref('dashboard');
 const systemInfo = ref<any>(null);
-const diskUsage = ref<{ totalBytes: number; usedBytes: number } | null>(null);
+const resourceCounts = ref<{ volumes: number; networks: number }>({ volumes: 0, networks: 0 });
 
 const tabs = [
   { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
@@ -32,16 +32,42 @@ const tabs = [
 ];
 
 const fetchStats = async () => {
-  try {
-    const [{ data: info }, { data: disk }] = await Promise.all([
-      dockerApi.getSystemInfo(),
-      dockerApi.getDiskUsage(),
-    ]);
-    systemInfo.value = info;
-    diskUsage.value = disk;
-  } catch (err) {
-    console.error('Failed to fetch stats:', err);
+  const [infoRes, volumesRes, networksRes] = await Promise.allSettled([
+    dockerApi.getSystemInfo(),
+    dockerApi.getVolumes(),
+    dockerApi.getNetworks(),
+  ]);
+
+  if (infoRes.status === 'fulfilled') {
+    systemInfo.value = infoRes.value.data;
+  } else {
+    console.error('Failed to fetch system info:', infoRes.reason);
   }
+
+  const volumeCount =
+    volumesRes.status === 'fulfilled'
+      ? (Array.isArray(volumesRes.value.data?.Volumes)
+          ? volumesRes.value.data.Volumes.length
+          : Array.isArray(volumesRes.value.data)
+            ? volumesRes.value.data.length
+            : resourceCounts.value.volumes)
+      : resourceCounts.value.volumes;
+  if (volumesRes.status !== 'fulfilled') {
+    console.error('Failed to fetch volumes:', volumesRes.reason);
+  }
+
+  const networkCount =
+    networksRes.status === 'fulfilled' && Array.isArray(networksRes.value.data)
+      ? networksRes.value.data.length
+      : resourceCounts.value.networks;
+  if (networksRes.status !== 'fulfilled') {
+    console.error('Failed to fetch networks:', networksRes.reason);
+  }
+
+  resourceCounts.value = {
+    volumes: volumeCount,
+    networks: networkCount,
+  };
 };
 
 onMounted(() => {
@@ -98,7 +124,11 @@ onMounted(() => {
 
       <section class="content-area animate-fade-in">
         <!-- Dashboard Component -->
-        <Dashboard v-if="activeTab === 'dashboard'" :system-info="systemInfo" :disk-usage="diskUsage" />
+        <Dashboard
+          v-if="activeTab === 'dashboard'"
+          :system-info="systemInfo"
+          :resource-counts="resourceCounts"
+        />
 
         <!-- Resource Components -->
         <ContainerList v-else-if="activeTab === 'containers'" />

@@ -4,6 +4,7 @@ import {
     Container,
     Box,
     HardDrive,
+    Network,
     TrendingUp
 } from 'lucide-vue-next';
 import {
@@ -32,7 +33,10 @@ ChartJS.register(
 
 const props = defineProps<{
     systemInfo: any;
-    diskUsage?: { totalBytes?: number; usedBytes?: number } | null;
+    resourceCounts?: {
+        volumes?: number;
+        networks?: number;
+    } | null;
 }>();
 
 const cpuData = ref<number[]>([]);
@@ -43,31 +47,6 @@ const maxDataPoints = 20;
 const toNumber = (value: unknown) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const parseBytes = (raw: string | undefined) => {
-    if (!raw) return 0;
-    const normalized = raw.trim().replace(/,/g, '');
-    const match = normalized.match(/^([\d.]+)\s*([kmgtp]?i?b?)?$/i);
-    if (!match) return 0;
-
-    const value = toNumber(match[1]);
-    const unit = (match[2] || 'b').toLowerCase();
-    const multipliers: Record<string, number> = {
-        b: 1,
-        kb: 1000,
-        mb: 1000 ** 2,
-        gb: 1000 ** 3,
-        tb: 1000 ** 4,
-        pb: 1000 ** 5,
-        kib: 1024,
-        mib: 1024 ** 2,
-        gib: 1024 ** 3,
-        tib: 1024 ** 4,
-        pib: 1024 ** 5
-    };
-
-    return value * (multipliers[unit] || 1);
 };
 
 const formatBytes = (bytes: number) => {
@@ -82,13 +61,6 @@ const formatBytes = (bytes: number) => {
     return `${value.toFixed(value >= 100 ? 0 : value >= 10 ? 1 : 2)} ${units[idx]}`;
 };
 
-const getDriverStatusValue = (key: string) => {
-    const status = props.systemInfo?.DriverStatus;
-    if (!Array.isArray(status)) return '';
-    const pair = status.find((entry: unknown) => Array.isArray(entry) && String(entry[0]) === key) as string[] | undefined;
-    return pair?.[1] || '';
-};
-
 const cpuPercent = computed(() => toNumber((cpuData.value[cpuData.value.length - 1] ?? 0).toFixed(2)));
 const memPercent = computed(() => toNumber((memData.value[memData.value.length - 1] ?? 0).toFixed(2)));
 const ncpu = computed(() => Math.max(1, toNumber(props.systemInfo?.NCPU || 1)));
@@ -98,20 +70,8 @@ const loadPercent = computed(() => Math.min(100, toNumber(((loadAvg.value / ncpu
 const memTotalBytes = computed(() => toNumber(props.systemInfo?.MemTotal || 0));
 const memUsedBytes = computed(() => toNumber((memTotalBytes.value * (memPercent.value / 100)).toFixed(0)));
 
-const diskUsedBytes = computed(() => {
-    const fromApi = toNumber(props.diskUsage?.usedBytes || 0);
-    if (fromApi > 0) return fromApi;
-    return parseBytes(getDriverStatusValue('Data Space Used'));
-});
-const diskTotalBytes = computed(() => {
-    const fromApi = toNumber(props.diskUsage?.totalBytes || 0);
-    if (fromApi > 0) return fromApi;
-    return parseBytes(getDriverStatusValue('Data Space Total'));
-});
-const diskPercent = computed(() => {
-    if (!diskTotalBytes.value) return 0;
-    return Math.min(100, toNumber(((diskUsedBytes.value / diskTotalBytes.value) * 100).toFixed(2)));
-});
+const volumeCount = computed(() => toNumber(props.resourceCounts?.volumes ?? props.systemInfo?.Volumes ?? 0));
+const networkCount = computed(() => toNumber(props.resourceCounts?.networks ?? props.systemInfo?.Networks ?? 0));
 
 const gauges = computed(() => ([
     {
@@ -137,16 +97,6 @@ const gauges = computed(() => ([
         value: `${memPercent.value}`,
         unit: '%',
         detail: `${formatBytes(memUsedBytes.value)} / ${formatBytes(memTotalBytes.value)}`,
-    },
-    {
-        key: 'disk',
-        label: 'Disk',
-        percent: diskPercent.value,
-        value: diskTotalBytes.value > 0 ? `${diskPercent.value.toFixed(2)}` : 'N/A',
-        unit: diskTotalBytes.value > 0 ? '%' : '',
-        detail: diskTotalBytes.value > 0
-            ? `${formatBytes(diskUsedBytes.value)} / ${formatBytes(diskTotalBytes.value)}`
-            : `Used: ${formatBytes(diskUsedBytes.value)}`,
     }
 ]));
 
@@ -276,13 +226,27 @@ onUnmounted(() => {
                         <HardDrive :size="20" />
                     </div>
                     <div class="header-text">
-                        <h3>Resources</h3>
-                        <div class="value">{{ systemInfo?.Volumes || 0 }} Vol / {{ systemInfo?.Networks || 0 }} Net
-                        </div>
+                        <h3>Volumes</h3>
+                        <div class="value">{{ volumeCount }}</div>
                     </div>
                 </div>
                 <div class="card-footer">
-                    <span class="label">Storage & Networking</span>
+                    <span class="label">Docker volumes</span>
+                </div>
+            </div>
+
+            <div class="stat-card glass-panel">
+                <div class="card-header">
+                    <div class="icon-box cyan">
+                        <Network :size="20" />
+                    </div>
+                    <div class="header-text">
+                        <h3>Networks</h3>
+                        <div class="value">{{ networkCount }}</div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <span class="label">Docker networks</span>
                 </div>
             </div>
         </div>
@@ -372,6 +336,11 @@ onUnmounted(() => {
 .icon-box.amber {
     background: rgba(245, 158, 11, 0.1);
     color: #f59e0b;
+}
+
+.icon-box.cyan {
+    background: rgba(14, 165, 233, 0.12);
+    color: #0ea5e9;
 }
 
 .header-text h3 {

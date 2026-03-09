@@ -22,6 +22,7 @@ const activeContainer = ref<any | null>(null);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const pageSizeOptions = [10, 20, 50];
+const selectedIds = ref<string[]>([]);
 
 const showLogsModal = ref(false);
 const logsOutput = ref('');
@@ -37,7 +38,7 @@ let terminalSocket: WebSocket | null = null;
 const fetchContainers = async () => {
     try {
         const { data } = await dockerApi.getContainers();
-        containers.value = data;
+        containers.value = data || [];
     } catch (err) {
         console.error('Failed to fetch containers:', err);
     } finally {
@@ -65,6 +66,40 @@ const paginatedContainers = computed(() => {
 });
 const pageStart = computed(() => (totalItems.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1));
 const pageEnd = computed(() => Math.min(currentPage.value * pageSize.value, totalItems.value));
+
+const pageContainerIds = computed(() => paginatedContainers.value.map((c) => c.Id));
+const selectedCount = computed(() => selectedIds.value.length);
+const allPageSelected = computed(() => pageContainerIds.value.length > 0 && pageContainerIds.value.every((id) => selectedIds.value.includes(id)));
+
+const toggleSelect = (id: string) => {
+    if (selectedIds.value.includes(id)) {
+        selectedIds.value = selectedIds.value.filter((x) => x !== id);
+    } else {
+        selectedIds.value = [...selectedIds.value, id];
+    }
+};
+
+const toggleSelectAllPage = () => {
+    if (allPageSelected.value) {
+        selectedIds.value = selectedIds.value.filter((id) => !pageContainerIds.value.includes(id));
+    } else {
+        selectedIds.value = Array.from(new Set([...selectedIds.value, ...pageContainerIds.value]));
+    }
+};
+
+const bulkDelete = async () => {
+    if (selectedIds.value.length === 0) return;
+    if (!confirm(`Remove ${selectedIds.value.length} selected container(s)?`)) return;
+    try {
+        for (const id of selectedIds.value) {
+            await dockerApi.removeContainer(id);
+        }
+        selectedIds.value = [];
+        await fetchContainers();
+    } catch (err) {
+        alert(`Bulk delete failed: ${err}`);
+    }
+};
 
 const scrollToBottom = async (target: 'logs' | 'terminal') => {
     await nextTick();
@@ -140,6 +175,7 @@ const handleAction = async (action: string, id: string) => {
         else if (action === 'remove') {
             if (confirm('Are you sure you want to remove this container?')) {
                 await dockerApi.removeContainer(id);
+                selectedIds.value = selectedIds.value.filter((x) => x !== id);
             } else return;
         }
         await fetchContainers();
@@ -177,6 +213,11 @@ watch(pageSize, () => {
 watch(totalPages, (maxPage) => {
     if (currentPage.value > maxPage) currentPage.value = maxPage;
 });
+
+watch(filteredContainers, (list) => {
+    const valid = new Set(list.map((c) => c.Id));
+    selectedIds.value = selectedIds.value.filter((id) => valid.has(id));
+});
 </script>
 
 <template>
@@ -186,16 +227,30 @@ watch(totalPages, (maxPage) => {
                 <Search :size="18" />
                 <input v-model="searchQuery" type="text" placeholder="Search containers..." />
             </div>
-            <button class="btn btn-ghost" @click="fetchContainers">
-                <RefreshCw :size="18" :class="{ 'animate-spin': loading }" />
-                Refresh
-            </button>
+            <div class="toolbar-actions">
+                <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0" @click="bulkDelete">
+                    <Trash2 :size="16" />
+                    Bulk Delete ({{ selectedCount }})
+                </button>
+                <button class="btn btn-ghost" @click="fetchContainers">
+                    <RefreshCw :size="18" :class="{ 'animate-spin': loading }" />
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <div v-if="selectedCount > 0" class="selection-bar glass-panel">
+            {{ selectedCount }} selected
+            <button class="btn btn-ghost" @click="selectedIds = []">Clear</button>
         </div>
 
         <div class="table-container glass-panel">
             <table class="docker-table">
                 <thead>
                     <tr>
+                        <th class="check-col">
+                            <input type="checkbox" :checked="allPageSelected" @change="toggleSelectAllPage" />
+                        </th>
                         <th>Name</th>
                         <th>Image</th>
                         <th>Status</th>
@@ -206,6 +261,9 @@ watch(totalPages, (maxPage) => {
                 </thead>
                 <tbody>
                     <tr v-for="container in paginatedContainers" :key="container.Id">
+                        <td class="check-col">
+                            <input type="checkbox" :checked="selectedIds.includes(container.Id)" @change="toggleSelect(container.Id)" />
+                        </td>
                         <td class="name-cell">
                             <div class="container-name">
                                 {{ container.Names[0].replace('/', '') }}
@@ -259,7 +317,7 @@ watch(totalPages, (maxPage) => {
                         </td>
                     </tr>
                     <tr v-if="filteredContainers.length === 0 && !loading">
-                        <td colspan="6" class="empty-state">No containers found</td>
+                        <td colspan="7" class="empty-state">No containers found</td>
                     </tr>
                 </tbody>
             </table>
@@ -325,6 +383,20 @@ watch(totalPages, (maxPage) => {
     align-items: center;
 }
 
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.selection-bar {
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-muted);
+}
+
 .search-box {
     display: flex;
     align-items: center;
@@ -368,6 +440,12 @@ watch(totalPages, (maxPage) => {
     padding: 16px 24px;
     font-size: 0.9rem;
     border-bottom: 1px solid var(--glass-border);
+}
+
+.check-col {
+    width: 40px;
+    text-align: center !important;
+    padding: 12px !important;
 }
 
 .docker-table tr:last-child td {
@@ -498,10 +576,6 @@ watch(totalPages, (maxPage) => {
 .actions-cell {
     text-align: right;
     width: 200px;
-}
-
-.text-danger {
-    color: var(--danger) !important;
 }
 
 .animate-spin {
