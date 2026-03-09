@@ -423,7 +423,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     width: 100%;
     height: 100%;
     border-radius: 50%;
-    background: #343b50;
+    background: var(--surface-elevated);
     border: 1px solid rgba(148, 163, 184, 0.22);
     display: flex;
     flex-direction: column;
@@ -436,19 +436,19 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     font-family: 'Outfit', sans-serif;
     font-size: 1.8rem;
     font-weight: 700;
-    color: #e2e8f0;
+    color: var(--text-main);
     line-height: 1;
 }
 
 .gauge-value .unit {
     font-size: 0.95rem;
     margin-left: 2px;
-    color: #94a3b8;
+    color: var(--text-muted);
 }
 
 .gauge-label {
     font-size: 0.95rem;
-    color: #cbd5e1;
+    color: var(--text-main);
 }
 
 .gauge-detail {

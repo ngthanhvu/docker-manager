@@ -4,7 +4,7 @@ import {
     Play,
     Square,
     Trash2,
-    Terminal,
+    Terminal as TerminalIcon,
     FileText,
     Search,
     RefreshCw
@@ -12,6 +12,9 @@ import {
 import { dockerApi, getWsUrl } from '../api';
 import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
+import { Terminal as XTerm } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -32,10 +35,16 @@ const logsEl = ref<HTMLElement | null>(null);
 let logsSocket: WebSocket | null = null;
 
 const showTerminalModal = ref(false);
-const terminalOutput = ref('');
-const terminalInput = ref('');
-const terminalEl = ref<HTMLElement | null>(null);
+const terminalEl = ref<HTMLDivElement | null>(null);
 let terminalSocket: WebSocket | null = null;
+let terminalReconnectTimer: number | null = null;
+let terminalReconnectAttempts = 0;
+let terminalManualClose = false;
+let xterm: XTerm | null = null;
+let fitAddon: FitAddon | null = null;
+let terminalResizeObserver: ResizeObserver | null = null;
+let terminalDataDisposable: { dispose: () => void } | null = null;
+let terminalContainerName = '';
 
 const fetchContainers = async () => {
     try {
@@ -112,20 +121,15 @@ const bulkDelete = async () => {
     }
 };
 
-const scrollToBottom = async (target: 'logs' | 'terminal') => {
+const scrollToBottom = async () => {
     await nextTick();
-    const el = target === 'logs' ? logsEl.value : terminalEl.value;
+    const el = logsEl.value;
     if (el) el.scrollTop = el.scrollHeight;
 };
 
 const appendLogs = (text: string) => {
     logsOutput.value += text;
-    scrollToBottom('logs');
-};
-
-const appendTerminal = (text: string) => {
-    terminalOutput.value += text;
-    scrollToBottom('terminal');
+    scrollToBottom();
 };
 
 const closeLogs = () => {
@@ -138,10 +142,28 @@ const closeLogs = () => {
 
 const closeTerminal = () => {
     showTerminalModal.value = false;
+    terminalManualClose = true;
+    if (terminalReconnectTimer) {
+        window.clearTimeout(terminalReconnectTimer);
+        terminalReconnectTimer = null;
+    }
     if (terminalSocket) {
         terminalSocket.close();
         terminalSocket = null;
     }
+    if (terminalResizeObserver && terminalEl.value) {
+        terminalResizeObserver.unobserve(terminalEl.value);
+    }
+    terminalResizeObserver = null;
+    if (xterm) {
+        if (terminalDataDisposable) {
+            terminalDataDisposable.dispose();
+            terminalDataDisposable = null;
+        }
+        xterm.dispose();
+        xterm = null;
+    }
+    fitAddon = null;
 };
 
 const openLogs = (container: any) => {
@@ -157,26 +179,77 @@ const openLogs = (container: any) => {
     logsSocket.onclose = () => appendLogs('\n[closed] Log stream closed.\n');
 };
 
-const openTerminal = (container: any) => {
-    closeTerminal();
-    activeContainer.value = container;
-    terminalOutput.value = '';
-    terminalInput.value = '';
-    showTerminalModal.value = true;
-
-    terminalSocket = new WebSocket(getWsUrl(`/terminal/${container.Id}`));
-    terminalSocket.onopen = () => appendTerminal(`[connected] Terminal attached to ${container.Names?.[0]?.replace('/', '')}\n`);
-    terminalSocket.onmessage = (event) => appendTerminal(String(event.data));
-    terminalSocket.onerror = () => appendTerminal('\n[error] Terminal connection failed.\n');
-    terminalSocket.onclose = () => appendTerminal('\n[closed] Terminal disconnected.\n');
+const initTerminalUi = async () => {
+    await nextTick();
+    if (!terminalEl.value) return;
+    const css = getComputedStyle(document.documentElement);
+    const fg = css.getPropertyValue('--code-text').trim() || '#d1d5db';
+    const bg = css.getPropertyValue('--code-bg').trim() || '#0b1220';
+    const cursor = css.getPropertyValue('--primary').trim() || '#2496ed';
+    xterm = new XTerm({
+        cursorBlink: true,
+        fontFamily: 'JetBrains Mono, Fira Code, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace',
+        fontSize: 13,
+        convertEol: true,
+        theme: {
+            foreground: fg,
+            background: bg,
+            cursor,
+            cursorAccent: bg,
+        },
+    });
+    fitAddon = new FitAddon();
+    xterm.loadAddon(fitAddon);
+    xterm.open(terminalEl.value);
+    fitAddon.fit();
+    xterm.focus();
+    terminalDataDisposable = xterm.onData((data) => {
+        if (!terminalSocket || terminalSocket.readyState !== WebSocket.OPEN) return;
+        terminalSocket.send(data);
+    });
+    terminalResizeObserver = new ResizeObserver(() => fitAddon?.fit());
+    terminalResizeObserver.observe(terminalEl.value);
 };
 
-const sendTerminalInput = () => {
-    if (!terminalInput.value.trim() || !terminalSocket || terminalSocket.readyState !== WebSocket.OPEN) {
-        return;
-    }
-    terminalSocket.send(`${terminalInput.value}\n`);
-    terminalInput.value = '';
+const writeTerminal = (text: string) => {
+    xterm?.write(text);
+};
+
+const openTerminal = async (container: any) => {
+    closeTerminal();
+    activeContainer.value = container;
+    showTerminalModal.value = true;
+    terminalManualClose = false;
+    terminalReconnectAttempts = 0;
+    terminalContainerName = container.Names?.[0]?.replace('/', '') || container.Id.substring(0, 12);
+    await initTerminalUi();
+
+    const connectTerminal = (silent = false) => {
+        const shell = encodeURIComponent(appSettings.runtime.terminalShell);
+        terminalSocket = new WebSocket(getWsUrl(`/terminal/${container.Id}?shell=${shell}`));
+        terminalSocket.onopen = () => {
+            terminalReconnectAttempts = 0;
+            if (!silent) {
+                writeTerminal(`\r\n[connected] Terminal attached to ${terminalContainerName}\r\n`);
+            }
+            xterm?.focus();
+        };
+        terminalSocket.onmessage = (event) => writeTerminal(String(event.data));
+        terminalSocket.onerror = () => writeTerminal('\r\n[error] Terminal connection failed.\r\n');
+        terminalSocket.onclose = () => {
+            terminalSocket = null;
+            if (terminalManualClose || !showTerminalModal.value) return;
+            terminalReconnectAttempts += 1;
+            if (terminalReconnectAttempts <= 3) {
+                writeTerminal(`\r\n[reconnect] Terminal disconnected. Reconnecting (${terminalReconnectAttempts}/3)...\r\n`);
+                terminalReconnectTimer = window.setTimeout(() => connectTerminal(true), 900);
+                return;
+            }
+            writeTerminal('\r\n[closed] Terminal disconnected.\r\n');
+        };
+    };
+
+    connectTerminal();
 };
 
 const handleAction = async (action: string, id: string) => {
@@ -336,7 +409,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                                     <FileText :size="16" />
                                 </button>
                                 <button class="action-btn action-neutral" title="Terminal" @click="openTerminal(container)">
-                                    <Terminal :size="16" />
+                                    <TerminalIcon :size="16" />
                                 </button>
                                 <button
                                     class="action-btn action-danger"
@@ -375,7 +448,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                     <h3>Logs: {{ activeContainer?.Names?.[0]?.replace('/', '') }}</h3>
                     <button class="btn btn-ghost" @click="closeLogs">Close</button>
                 </div>
-                <pre ref="logsEl" class="terminal-output">{{ logsOutput }}</pre>
+                <pre ref="logsEl" class="terminal-output log-output">{{ logsOutput }}</pre>
             </div>
         </div>
 
@@ -385,16 +458,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                     <h3>Terminal: {{ activeContainer?.Names?.[0]?.replace('/', '') }}</h3>
                     <button class="btn btn-ghost" @click="closeTerminal">Close</button>
                 </div>
-                <pre ref="terminalEl" class="terminal-output">{{ terminalOutput }}</pre>
-                <div class="terminal-input-row">
-                    <input
-                        v-model="terminalInput"
-                        type="text"
-                        placeholder="Type command and press Enter..."
-                        @keyup.enter="sendTerminalInput"
-                    />
-                    <button class="btn btn-ghost" @click="sendTerminalInput">Send</button>
-                </div>
+                <div ref="terminalEl" class="terminal-output terminal-xterm"></div>
             </div>
         </div>
     </div>
@@ -442,7 +506,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 .search-box input {
     background: transparent;
     border: none;
-    color: white;
+    color: var(--text-main);
     outline: none;
     font-size: 0.9rem;
     width: 100%;
@@ -694,28 +758,33 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 .terminal-output {
     height: 60vh;
     margin: 0;
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    background: var(--code-bg);
+}
+
+.log-output {
     padding: 12px;
     overflow: auto;
-    border-radius: 8px;
-    border: 1px solid var(--glass-border);
-    background: #0b1220;
-    color: #d1d5db;
+    color: var(--code-text);
+    font-family: var(--font-mono);
     font-size: 0.85rem;
     line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
-.terminal-input-row {
-    display: flex;
-    gap: 8px;
+.terminal-xterm {
+    overflow: hidden;
 }
 
-.terminal-input-row input {
-    flex: 1;
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    color: var(--text-main);
-    border-radius: 8px;
+.terminal-xterm :deep(.xterm) {
+    height: 100%;
     padding: 10px 12px;
-    outline: none;
+}
+
+.terminal-xterm :deep(.xterm-viewport) {
+    overflow-y: auto !important;
+    background: transparent !important;
 }
 </style>

@@ -189,7 +189,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
   font-weight: 700;
   margin-bottom: 40px;
   padding: 0 8px;
-  color: white;
+  color: var(--text-main);
 }
 
 .logo-whale {

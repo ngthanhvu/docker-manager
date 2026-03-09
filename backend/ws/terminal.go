@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 
 	"docker-ui/docker"
 	"github.com/docker/docker/api/types"
@@ -21,18 +22,34 @@ func TerminalHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// In v26, ExecConfig and ExecStartCheck are in types
-	execConfig := types.ExecConfig{
-		AttachStdout: true,
-		AttachStderr: true,
-		AttachStdin:  true,
-		Tty:          true,
-		Cmd:          []string{"/bin/sh"},
+	requestedShell := strings.TrimSpace(r.URL.Query().Get("shell"))
+	shells := []string{}
+	if requestedShell == "/bin/bash" || requestedShell == "/bin/sh" {
+		shells = append(shells, requestedShell)
 	}
+	// Always keep a safe fallback so the terminal can still open.
+	shells = append(shells, "/bin/sh", "/bin/bash")
 
-	execID, err := docker.Cli.ContainerExecCreate(context.Background(), id, execConfig)
-	if err != nil {
-		log.Printf("Failed to create exec: %v", err)
+	var execID types.IDResponse
+	var lastErr error
+	for _, shell := range shells {
+		execConfig := types.ExecConfig{
+			AttachStdout: true,
+			AttachStderr: true,
+			AttachStdin:  true,
+			Tty:          true,
+			Cmd:          []string{shell},
+			Env:          []string{"TERM=xterm-256color"},
+		}
+		execID, err = docker.Cli.ContainerExecCreate(context.Background(), id, execConfig)
+		if err == nil {
+			lastErr = nil
+			break
+		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		log.Printf("Failed to create exec: %v", lastErr)
 		return
 	}
 
@@ -54,7 +71,9 @@ func TerminalHandler(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return
 			}
-			resp.Conn.Write(msg)
+			if _, err := resp.Conn.Write(msg); err != nil {
+				return
+			}
 		}
 	}()
 

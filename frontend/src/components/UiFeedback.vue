@@ -51,7 +51,7 @@ import { feedback } from '../ui/feedback';
     position: fixed;
     inset: 0;
     z-index: 80;
-    background: rgba(2, 6, 23, 0.62);
+    background: var(--overlay-bg);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -96,7 +96,7 @@ import { feedback } from '../ui/feedback';
 
 .confirm-input-wrap input {
     border: 1px solid var(--glass-border);
-    background: rgba(15, 23, 42, 0.7);
+    background: var(--input-bg);
     color: var(--text-main);
     padding: 8px 10px;
     border-radius: 10px;

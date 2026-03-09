@@ -30,10 +30,13 @@ const resetUI = () => {
                         <option :value="10000">10s</option>
                     </select>
                 </label>
-                <label class="field">
+                <div class="field field-switch">
                     <span>Confirm destructive actions</span>
-                    <input v-model="appSettings.general.confirmDestructive" type="checkbox" />
-                </label>
+                    <label class="toggle-switch">
+                        <input v-model="appSettings.general.confirmDestructive" type="checkbox" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
                 <label class="field">
                     <span>Language</span>
                     <select v-model="appSettings.general.language">
@@ -72,10 +75,13 @@ const resetUI = () => {
                     <span>Font scale ({{ appSettings.ui.fontScale.toFixed(2) }})</span>
                     <input v-model.number="appSettings.ui.fontScale" type="range" min="0.9" max="1.15" step="0.01" />
                 </label>
-                <label class="field">
+                <div class="field field-switch">
                     <span>Show sidebar stats</span>
-                    <input v-model="appSettings.ui.showSidebarStats" type="checkbox" />
-                </label>
+                    <label class="toggle-switch">
+                        <input v-model="appSettings.ui.showSidebarStats" type="checkbox" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
             <div class="section-actions">
                 <button class="btn btn-ghost" @click="resetUI">Reset UI</button>
@@ -120,24 +126,33 @@ const resetUI = () => {
                     <span>Toast duration (ms)</span>
                     <input v-model.number="appSettings.notifications.toastDurationMs" type="number" min="1000" max="10000" step="100" />
                 </label>
-                <label class="field">
+                <div class="field field-switch">
                     <span>Show success toasts</span>
-                    <input v-model="appSettings.notifications.showSuccessToast" type="checkbox" />
-                </label>
-                <label class="field">
+                    <label class="toggle-switch">
+                        <input v-model="appSettings.notifications.showSuccessToast" type="checkbox" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="field field-switch">
                     <span>Show detailed errors</span>
-                    <input v-model="appSettings.notifications.showDetailedErrors" type="checkbox" />
-                </label>
+                    <label class="toggle-switch">
+                        <input v-model="appSettings.notifications.showDetailedErrors" type="checkbox" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
         </section>
 
         <section class="glass-panel section">
             <h3>Safety</h3>
             <div class="grid">
-                <label class="field">
+                <div class="field field-switch">
                     <span>Require typing DELETE for destructive actions</span>
-                    <input v-model="appSettings.safety.softDeleteRequireTyping" type="checkbox" />
-                </label>
+                    <label class="toggle-switch">
+                        <input v-model="appSettings.safety.softDeleteRequireTyping" type="checkbox" />
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
                 <label class="field field-full">
                     <span>Protected resources (comma-separated)</span>
                     <input
@@ -175,21 +190,76 @@ const resetUI = () => {
     gap: 12px 16px;
 }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; color: var(--text-muted); }
+.field-switch {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding-top: 2px;
+}
 .field input[type="text"],
 .field input[type="number"],
 .field select {
     border: 1px solid var(--glass-border);
-    background: rgba(15, 23, 42, 0.6);
+    background: var(--input-bg);
     color: var(--text-main);
     border-radius: 10px;
     padding: 8px 10px;
     outline: none;
 }
-.field input[type="checkbox"] { width: 18px; height: 18px; }
+
+.field select option {
+    background: var(--select-option-bg);
+    color: var(--select-option-text);
+}
 .field input[type="range"] { width: 100%; }
 .field small { font-size: 0.76rem; color: var(--text-muted); }
 .field-full { grid-column: 1 / -1; }
 .section-actions { margin-top: 12px; display: flex; justify-content: flex-end; }
+
+.toggle-switch {
+    position: relative;
+    width: 46px;
+    height: 26px;
+    display: inline-block;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.35);
+    border: 1px solid var(--glass-border);
+    transition: all 0.2s ease;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    transition: transform 0.2s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: rgba(36, 150, 237, 0.35);
+    border-color: rgba(36, 150, 237, 0.6);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(20px);
+}
 .about-grid {
     display: grid;
     grid-template-columns: 180px 1fr;

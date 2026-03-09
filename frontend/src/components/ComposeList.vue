@@ -586,7 +586,7 @@ watch(() => appSettings.runtime.defaultLogTail, (next) => {
     position: sticky;
     top: 0;
     z-index: 1;
-    background: #1d2940;
+    background: var(--table-header-bg);
 }
 
 .services-table tr:last-child td {
@@ -686,8 +686,8 @@ watch(() => appSettings.runtime.defaultLogTail, (next) => {
 
 .code {
     margin: 0;
-    background: #0b1220;
-    color: #d1d5db;
+    background: var(--code-bg);
+    color: var(--code-text);
     font-size: 0.8rem;
     line-height: 1.35;
     padding: 10px;
@@ -701,8 +701,8 @@ watch(() => appSettings.runtime.defaultLogTail, (next) => {
 }
 
 .logs {
-    background: #0b1220;
-    color: #d1d5db;
+    background: var(--code-bg);
+    color: var(--code-text);
     font-size: 0.8rem;
     line-height: 1.35;
 }
