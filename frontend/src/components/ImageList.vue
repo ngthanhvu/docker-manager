@@ -12,6 +12,19 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const pageSizeOptions = [10, 20, 50];
 const selectedIds = ref<string[]>([]);
+const pruning = ref(false);
+
+const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+    }
+    return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+};
 
 const fetchImages = async () => {
     try {
@@ -67,6 +80,30 @@ const bulkDelete = async () => {
     }
 };
 
+const pruneImages = async () => {
+    if (pruning.value) return;
+    const accepted = await feedback.confirmAction({
+        title: 'Prune Images',
+        message: 'Remove all unused images? This also clears dangling layers.',
+        confirmText: 'Prune',
+        danger: true,
+        requireText: appSettings.safety.softDeleteRequireTyping ? 'PRUNE' : undefined,
+    });
+    if (!accepted) return;
+    try {
+        pruning.value = true;
+        const { data } = await dockerApi.pruneImages();
+        await fetchImages();
+        const deletedCount = Array.isArray(data?.ImagesDeleted) ? data.ImagesDeleted.length : 0;
+        const reclaimed = formatBytes(Number(data?.SpaceReclaimed || 0));
+        feedback.success(`Pruned ${deletedCount} unused image(s), reclaimed ${reclaimed}.`);
+    } catch (err) {
+        feedback.error(`Image prune failed: ${err}`);
+    } finally {
+        pruning.value = false;
+    }
+};
+
 const formatSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 const totalItems = computed(() => images.value.length);
@@ -116,10 +153,15 @@ onMounted(fetchImages);
             <div class="toolbar-actions">
                 <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0" @click="bulkDelete">
                     <Trash2 :size="16" />
-                    Bulk Delete ({{ selectedCount }})
+                    Delete ({{ selectedCount }})
                 </button>
-                <button class="btn btn-ghost" @click="fetchImages">
-                    <RefreshCw :size="18" :class="{ 'animate-spin': loading }" />
+                <button class="btn btn-ghost text-danger" :disabled="pruning" @click="pruneImages">
+                    <RefreshCw v-if="pruning" :size="16" class="animate-spin" />
+                    <Trash2 v-else :size="16" />
+                    Prune Unused
+                </button>
+                <button class="btn btn-ghost" :disabled="pruning" @click="fetchImages">
+                    <RefreshCw :size="18" :class="{ 'animate-spin': loading || pruning }" />
                     Refresh
                 </button>
             </div>

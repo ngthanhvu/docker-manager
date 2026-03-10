@@ -3,6 +3,7 @@ package docker
 import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 )
 
 func ListContainers() ([]types.Container, error) {
@@ -50,6 +51,13 @@ func RemoveContainer(id string) error {
 		container.RemoveOptions{
 			Force: true,
 		},
+	)
+}
+
+func PruneContainers() (any, error) {
+	return Cli.ContainersPrune(
+		Ctx(),
+		filters.Args{},
 	)
 }
 

@@ -166,6 +166,8 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 .app-container {
   display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
+  height: 100%;
   width: 100%;
   max-width: 100%;
   overflow: hidden;
@@ -271,6 +273,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 .main-content {
   flex-grow: 1;
   min-width: 0;
+  min-height: 0;
   padding: 40px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -335,6 +338,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 .content-area {
   flex-grow: 1;
   min-width: 0;
+  min-height: 0;
   width: 100%;
 }
 </style>

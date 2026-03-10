@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 )
 
@@ -18,4 +19,11 @@ func RemoveImage(id string) error {
 		image.RemoveOptions{Force: true},
 	)
 	return err
+}
+
+func PruneImages() (any, error) {
+	return Cli.ImagesPrune(
+		Ctx(),
+		filters.NewArgs(filters.Arg("dangling", "false")),
+	)
 }

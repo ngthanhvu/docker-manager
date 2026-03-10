@@ -2,14 +2,27 @@ package ws
 
 import (
 	"context"
-	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"docker-ui/docker"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/gorilla/websocket"
 	"github.com/gorilla/mux"
 )
+
+type wsTextWriter struct {
+	conn *websocket.Conn
+}
+
+func (w *wsTextWriter) Write(p []byte) (int, error) {
+	if err := w.conn.WriteMessage(websocket.TextMessage, p); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
 
 func LogsHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -27,6 +40,10 @@ func LogsHandler(w http.ResponseWriter, r *http.Request) {
 		ShowStderr: true,
 		Follow:     true,
 		Timestamps: true,
+		Tail:       "300",
+	}
+	if tail := strings.TrimSpace(r.URL.Query().Get("tail")); tail != "" {
+		options.Tail = tail
 	}
 
 	out, err := docker.Cli.ContainerLogs(context.Background(), id, options)
@@ -36,19 +53,8 @@ func LogsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer out.Close()
 
-	buf := make([]byte, 1024)
-	for {
-		n, err := out.Read(buf)
-		if n > 0 {
-			if err := conn.WriteMessage(1, buf[:n]); err != nil {
-				break
-			}
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			break
-		}
+	writer := &wsTextWriter{conn: conn}
+	if _, err := stdcopy.StdCopy(writer, writer, out); err != nil {
+		log.Printf("Log stream closed for container %s: %v", id, err)
 	}
 }

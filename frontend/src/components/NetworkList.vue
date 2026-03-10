@@ -11,6 +11,7 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const pageSizeOptions = [10, 20, 50];
 const selectedIds = ref<string[]>([]);
+const pruning = ref(false);
 
 const fetchNetworks = async () => {
     try {
@@ -66,6 +67,29 @@ const bulkDelete = async () => {
     }
 };
 
+const pruneNetworks = async () => {
+    if (pruning.value) return;
+    const accepted = await feedback.confirmAction({
+        title: 'Prune Networks',
+        message: 'Remove all unused custom networks? Active and default networks will be kept.',
+        confirmText: 'Prune',
+        danger: true,
+        requireText: appSettings.safety.softDeleteRequireTyping ? 'PRUNE' : undefined,
+    });
+    if (!accepted) return;
+    try {
+        pruning.value = true;
+        const { data } = await dockerApi.pruneNetworks();
+        await fetchNetworks();
+        const deletedCount = Array.isArray(data?.NetworksDeleted) ? data.NetworksDeleted.length : 0;
+        feedback.success(`Pruned ${deletedCount} unused network(s).`);
+    } catch (err) {
+        feedback.error(`Network prune failed: ${err}`);
+    } finally {
+        pruning.value = false;
+    }
+};
+
 const totalItems = computed(() => networks.value.length);
 const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)));
 const paginatedNetworks = computed(() => {
@@ -111,12 +135,17 @@ onMounted(fetchNetworks);
                 <h2>Networks</h2>
             </div>
             <div class="toolbar-actions">
-                <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0" @click="bulkDelete">
+                <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0 || pruning" @click="bulkDelete">
                     <Trash2 :size="16" />
-                    Bulk Delete ({{ selectedCount }})
+                    Delete ({{ selectedCount }})
                 </button>
-                <button class="btn btn-ghost" @click="fetchNetworks">
-                    <RefreshCw :size="18" :class="{ 'animate-spin': loading }" />
+                <button class="btn btn-ghost text-danger" :disabled="pruning" @click="pruneNetworks">
+                    <RefreshCw v-if="pruning" :size="16" class="animate-spin" />
+                    <Trash2 v-else :size="16" />
+                    Prune Unused
+                </button>
+                <button class="btn btn-ghost" :disabled="pruning" @click="fetchNetworks">
+                    <RefreshCw :size="18" :class="{ 'animate-spin': loading || pruning }" />
                     Refresh
                 </button>
             </div>

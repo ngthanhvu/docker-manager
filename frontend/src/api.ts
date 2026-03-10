@@ -24,18 +24,22 @@ export const dockerApi = {
   restartContainer: (id: string) => api.post(`/containers/${id}/restart`),
   removeContainer: (id: string) => api.delete(`/containers/${id}/remove`),
   inspectContainer: (id: string) => api.get(`/containers/${id}/inspect`),
+  pruneContainers: () => api.post('/containers/prune'),
 
   // Images
   getImages: () => api.get('/images'),
   removeImage: (id: string) => api.delete(`/images/${id}`),
+  pruneImages: () => api.post('/images/prune'),
 
   // Volumes
   getVolumes: () => api.get('/volumes'),
   removeVolume: (id: string) => api.delete(`/volumes/${id}`),
+  pruneVolumes: () => api.post('/volumes/prune'),
 
   // Networks
   getNetworks: () => api.get('/networks'),
   removeNetwork: (id: string) => api.delete(`/networks/${id}`),
+  pruneNetworks: () => api.post('/networks/prune'),
 
   // System
   getSystemInfo: () => api.get('/info'),

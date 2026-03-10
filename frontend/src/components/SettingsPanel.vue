@@ -97,7 +97,7 @@ const resetUI = () => {
                     <small>Current API base: {{ apiHint }}</small>
                 </label>
                 <label class="field">
-                    <span>Default compose log tail</span>
+                    <span>Default log tail</span>
                     <input v-model.number="appSettings.runtime.defaultLogTail" type="number" min="50" max="5000" step="50" />
                 </label>
                 <label class="field">

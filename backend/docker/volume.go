@@ -1,6 +1,7 @@
 package docker
 
 import (
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/volume"
 )
 
@@ -20,5 +21,12 @@ func RemoveVolume(id string) error {
 		Ctx(),
 		id,
 		true,
+	)
+}
+
+func PruneVolumes() (any, error) {
+	return Cli.VolumesPrune(
+		Ctx(),
+		filters.Args{},
 	)
 }

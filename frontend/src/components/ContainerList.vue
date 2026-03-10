@@ -29,14 +29,20 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const pageSizeOptions = [10, 20, 50];
 const selectedIds = ref<string[]>([]);
+const pruning = ref(false);
 
 const showLogsModal = ref(false);
 const logsOutput = ref('');
 const logsEl = ref<HTMLElement | null>(null);
+const logsFollow = ref(true);
+const logsFontSize = ref(13);
+const logsModalExpanded = ref(false);
 let logsSocket: WebSocket | null = null;
 
 const showTerminalModal = ref(false);
 const terminalEl = ref<HTMLDivElement | null>(null);
+const terminalFontSize = ref(13);
+const terminalModalExpanded = ref(false);
 let terminalSocket: WebSocket | null = null;
 let terminalReconnectTimer: number | null = null;
 let terminalReconnectAttempts = 0;
@@ -152,6 +158,30 @@ const bulkDelete = async () => {
     }
 };
 
+const pruneContainers = async () => {
+    if (pruning.value) return;
+    const accepted = await feedback.confirmAction({
+        title: 'Prune Containers',
+        message: 'Remove all stopped containers?',
+        confirmText: 'Prune',
+        danger: true,
+        requireText: appSettings.safety.softDeleteRequireTyping ? 'PRUNE' : undefined,
+    });
+    if (!accepted) return;
+
+    try {
+        pruning.value = true;
+        const { data } = await dockerApi.pruneContainers();
+        await fetchContainers();
+        const deletedCount = Array.isArray(data?.ContainersDeleted) ? data.ContainersDeleted.length : 0;
+        feedback.success(`Pruned ${deletedCount} stopped container(s).`);
+    } catch (err) {
+        feedback.error(`Container prune failed: ${err}`);
+    } finally {
+        pruning.value = false;
+    }
+};
+
 const bulkStart = async () => {
     if (selectedIds.value.length === 0) return;
     const total = selectedIds.value.length;
@@ -206,13 +236,25 @@ const scrollToBottom = async () => {
     if (el) el.scrollTop = el.scrollHeight;
 };
 
+const stripAnsi = (text: string) => text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+
+const isNearBottom = () => {
+    const el = logsEl.value;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+};
+
 const appendLogs = (text: string) => {
-    logsOutput.value += text;
-    scrollToBottom();
+    const shouldStickToBottom = logsFollow.value && isNearBottom();
+    logsOutput.value += stripAnsi(text);
+    if (shouldStickToBottom) {
+        scrollToBottom();
+    }
 };
 
 const closeLogs = () => {
     showLogsModal.value = false;
+    logsModalExpanded.value = false;
     if (logsSocket) {
         logsSocket.close();
         logsSocket = null;
@@ -221,6 +263,7 @@ const closeLogs = () => {
 
 const closeTerminal = () => {
     showTerminalModal.value = false;
+    terminalModalExpanded.value = false;
     terminalManualClose = true;
     if (terminalReconnectTimer) {
         window.clearTimeout(terminalReconnectTimer);
@@ -249,13 +292,32 @@ const openLogs = (container: any) => {
     closeLogs();
     activeContainer.value = container;
     logsOutput.value = '';
+    logsFollow.value = true;
     showLogsModal.value = true;
 
-    logsSocket = new WebSocket(getWsUrl(`/logs/${container.Id}`));
+    const tail = Math.max(50, Number(appSettings.runtime.defaultLogTail) || 300);
+    logsSocket = new WebSocket(getWsUrl(`/logs/${container.Id}?tail=${tail}`));
     logsSocket.onopen = () => appendLogs(`[connected] Streaming logs for ${container.Names?.[0]?.replace('/', '')}\n`);
     logsSocket.onmessage = (event) => appendLogs(String(event.data));
     logsSocket.onerror = () => appendLogs('\n[error] Failed to read logs stream.\n');
     logsSocket.onclose = () => appendLogs('\n[closed] Log stream closed.\n');
+};
+
+const handleLogsScroll = () => {
+    logsFollow.value = isNearBottom();
+};
+
+const jumpToLatestLogs = () => {
+    logsFollow.value = true;
+    scrollToBottom();
+};
+
+const adjustLogsFontSize = (delta: number) => {
+    logsFontSize.value = Math.min(20, Math.max(11, logsFontSize.value + delta));
+};
+
+const toggleLogsSize = () => {
+    logsModalExpanded.value = !logsModalExpanded.value;
 };
 
 const initTerminalUi = async () => {
@@ -268,7 +330,7 @@ const initTerminalUi = async () => {
     xterm = new XTerm({
         cursorBlink: true,
         fontFamily: 'JetBrains Mono, Fira Code, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace',
-        fontSize: 13,
+        fontSize: terminalFontSize.value,
         convertEol: true,
         theme: {
             foreground: fg,
@@ -292,6 +354,22 @@ const initTerminalUi = async () => {
 
 const writeTerminal = (text: string) => {
     xterm?.write(text);
+};
+
+const adjustTerminalFontSize = (delta: number) => {
+    terminalFontSize.value = Math.min(20, Math.max(11, terminalFontSize.value + delta));
+    if (xterm) {
+        xterm.options.fontSize = terminalFontSize.value;
+        fitAddon?.fit();
+        xterm.focus();
+    }
+};
+
+const toggleTerminalSize = async () => {
+    terminalModalExpanded.value = !terminalModalExpanded.value;
+    await nextTick();
+    fitAddon?.fit();
+    xterm?.focus();
 };
 
 const openTerminal = async (container: any) => {
@@ -421,20 +499,25 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 <input v-model="searchQuery" type="text" placeholder="Search containers..." />
             </div>
             <div class="toolbar-actions">
-                <button class="btn btn-ghost" :disabled="selectedCount === 0" @click="bulkStart">
+                <button class="btn btn-ghost" :disabled="selectedCount === 0 || pruning" @click="bulkStart">
                     <Play :size="16" />
-                    Bulk Start
+                    Start
                 </button>
-                <button class="btn btn-ghost" :disabled="selectedCount === 0" @click="bulkRestart">
+                <button class="btn btn-ghost" :disabled="selectedCount === 0 || pruning" @click="bulkRestart">
                     <RefreshCw :size="16" />
-                    Bulk Restart
+                    Restart
                 </button>
-                <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0" @click="bulkDelete">
+                <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0 || pruning" @click="bulkDelete">
                     <Trash2 :size="16" />
-                    Bulk Delete
+                    Delete
                 </button>
-                <button class="btn btn-ghost" @click="fetchContainers">
-                    <RefreshCw :size="18" :class="{ 'animate-spin': loading }" />
+                <button class="btn btn-ghost text-danger" :disabled="pruning" @click="pruneContainers">
+                    <RefreshCw v-if="pruning" :size="16" class="animate-spin" />
+                    <Trash2 v-else :size="16" />
+                    Prune Unused
+                </button>
+                <button class="btn btn-ghost" :disabled="pruning" @click="fetchContainers">
+                    <RefreshCw :size="18" :class="{ 'animate-spin': loading || pruning }" />
                     Refresh
                 </button>
             </div>
@@ -542,20 +625,42 @@ watch(() => appSettings.general.autoRefreshMs, () => {
         </div>
 
         <div v-if="showLogsModal" class="modal-backdrop" @click.self="closeLogs">
-            <div class="modal-panel glass-panel">
+            <div class="modal-panel glass-panel logs-modal-panel" :class="{ 'is-expanded': logsModalExpanded }">
                 <div class="modal-header">
                     <h3>Logs: {{ activeContainer?.Names?.[0]?.replace('/', '') }}</h3>
-                    <button class="btn btn-ghost" @click="closeLogs">Close</button>
+                    <div class="modal-actions">
+                        <button class="btn btn-ghost" @click="adjustLogsFontSize(-1)">A-</button>
+                        <button class="btn btn-ghost" @click="adjustLogsFontSize(1)">A+</button>
+                        <button class="btn btn-ghost" @click="toggleLogsSize">
+                            {{ logsModalExpanded ? 'Normal Size' : 'Expand' }}
+                        </button>
+                        <button class="btn btn-ghost" :class="{ 'is-active': logsFollow }" @click="jumpToLatestLogs">
+                            {{ logsFollow ? 'Following' : 'Jump To Latest' }}
+                        </button>
+                        <button class="btn btn-ghost" @click="closeLogs">Close</button>
+                    </div>
                 </div>
-                <pre ref="logsEl" class="terminal-output log-output">{{ logsOutput }}</pre>
+                <pre
+                    ref="logsEl"
+                    class="terminal-output log-output"
+                    :style="{ fontSize: `${logsFontSize}px` }"
+                    @scroll="handleLogsScroll"
+                >{{ logsOutput }}</pre>
             </div>
         </div>
 
         <div v-if="showTerminalModal" class="modal-backdrop" @click.self="closeTerminal">
-            <div class="modal-panel glass-panel">
+            <div class="modal-panel glass-panel terminal-modal-panel" :class="{ 'is-expanded': terminalModalExpanded }">
                 <div class="modal-header">
                     <h3>Terminal: {{ activeContainer?.Names?.[0]?.replace('/', '') }}</h3>
-                    <button class="btn btn-ghost" @click="closeTerminal">Close</button>
+                    <div class="modal-actions">
+                        <button class="btn btn-ghost" @click="adjustTerminalFontSize(-1)">A-</button>
+                        <button class="btn btn-ghost" @click="adjustTerminalFontSize(1)">A+</button>
+                        <button class="btn btn-ghost" @click="toggleTerminalSize">
+                            {{ terminalModalExpanded ? 'Normal Size' : 'Expand' }}
+                        </button>
+                        <button class="btn btn-ghost" @click="closeTerminal">Close</button>
+                    </div>
                 </div>
                 <div ref="terminalEl" class="terminal-output terminal-xterm"></div>
             </div>
@@ -901,6 +1006,32 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     padding: 18px;
 }
 
+.logs-modal-panel {
+    width: min(1240px, 96vw);
+    min-width: 720px;
+    min-height: 420px;
+    resize: both;
+    overflow: hidden;
+}
+
+.logs-modal-panel.is-expanded {
+    width: min(1520px, 98vw);
+    max-height: 94vh;
+}
+
+.terminal-modal-panel {
+    width: min(1240px, 96vw);
+    min-width: 760px;
+    min-height: 420px;
+    resize: both;
+    overflow: hidden;
+}
+
+.terminal-modal-panel.is-expanded {
+    width: min(1520px, 98vw);
+    max-height: 94vh;
+}
+
 .modal-header {
     display: flex;
     align-items: center;
@@ -908,9 +1039,20 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     gap: 12px;
 }
 
+.modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 .modal-header h3 {
     margin: 0;
     font-size: 1rem;
+}
+
+.modal-actions .is-active {
+    border-color: rgba(36, 150, 237, 0.45);
+    color: var(--primary);
 }
 
 .terminal-output {
@@ -926,7 +1068,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     overflow: auto;
     color: var(--code-text);
     font-family: var(--font-mono);
-    font-size: 0.85rem;
+    font-size: 13px;
     line-height: 1.4;
     white-space: pre-wrap;
     word-break: break-word;

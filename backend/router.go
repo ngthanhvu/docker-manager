@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"docker-ui/docker"
 	"docker-ui/ws"
+	"github.com/docker/docker/errdefs"
 	"github.com/gorilla/mux"
 )
 
@@ -18,18 +19,22 @@ func SetupRouter() *mux.Router {
 	r.HandleFunc("/api/containers/{id}/restart", RestartContainerHandler).Methods("POST")
 	r.HandleFunc("/api/containers/{id}/remove", RemoveContainerHandler).Methods("DELETE")
 	r.HandleFunc("/api/containers/{id}/inspect", InspectContainerHandler).Methods("GET")
+	r.HandleFunc("/api/containers/prune", PruneContainersHandler).Methods("POST")
 
 	// Image routes
 	r.HandleFunc("/api/images", ListImagesHandler).Methods("GET")
 	r.HandleFunc("/api/images/{id}", RemoveImageHandler).Methods("DELETE")
+	r.HandleFunc("/api/images/prune", PruneImagesHandler).Methods("POST")
 
 	// Volume routes
 	r.HandleFunc("/api/volumes", ListVolumesHandler).Methods("GET")
 	r.HandleFunc("/api/volumes/{id}", RemoveVolumeHandler).Methods("DELETE")
+	r.HandleFunc("/api/volumes/prune", PruneVolumesHandler).Methods("POST")
 
 	// Network routes
 	r.HandleFunc("/api/networks", ListNetworksHandler).Methods("GET")
 	r.HandleFunc("/api/networks/{id}", RemoveNetworkHandler).Methods("DELETE")
+	r.HandleFunc("/api/networks/prune", PruneNetworksHandler).Methods("POST")
 
 	// Stats routes
 	r.HandleFunc("/api/info", SystemInfoHandler).Methods("GET")
@@ -111,6 +116,15 @@ func InspectContainerHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(info)
 }
 
+func PruneContainersHandler(w http.ResponseWriter, r *http.Request) {
+	report, err := docker.PruneContainers()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(report)
+}
+
 func ListImagesHandler(w http.ResponseWriter, r *http.Request) {
 	images, err := docker.ListImages()
 	if err != nil {
@@ -130,6 +144,15 @@ func RemoveImageHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func PruneImagesHandler(w http.ResponseWriter, r *http.Request) {
+	report, err := docker.PruneImages()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(report)
+}
+
 func ListVolumesHandler(w http.ResponseWriter, r *http.Request) {
 	volumes, err := docker.ListVolumes()
 	if err != nil {
@@ -143,10 +166,27 @@ func RemoveVolumeHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	id := vars["id"]
 	if err := docker.RemoveVolume(id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if errdefs.IsConflict(err) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func PruneVolumesHandler(w http.ResponseWriter, r *http.Request) {
+	report, err := docker.PruneVolumes()
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errdefs.IsConflict(err) {
+			status = http.StatusConflict
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	json.NewEncoder(w).Encode(report)
 }
 
 func ListNetworksHandler(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +206,15 @@ func RemoveNetworkHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func PruneNetworksHandler(w http.ResponseWriter, r *http.Request) {
+	report, err := docker.PruneNetworks()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(report)
 }
 
 func SystemInfoHandler(w http.ResponseWriter, r *http.Request) {
