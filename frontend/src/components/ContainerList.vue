@@ -8,7 +8,8 @@ import {
     FileText,
     Search,
     RefreshCw,
-    RotateCw
+    RotateCw,
+    BrushCleaning
 } from 'lucide-vue-next';
 import { dockerApi, getWsUrl } from '../api';
 import { feedback } from '../ui/feedback';
@@ -507,14 +508,15 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                     <RefreshCw :size="16" />
                     Restart
                 </button>
-                <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0 || pruning" @click="bulkDelete">
+                <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0 || pruning"
+                    @click="bulkDelete">
                     <Trash2 :size="16" />
                     Delete
                 </button>
-                <button class="btn btn-ghost text-danger" :disabled="pruning" @click="pruneContainers">
+                <button class="btn btn-ghost text-warning" :disabled="pruning" @click="pruneContainers">
                     <RefreshCw v-if="pruning" :size="16" class="animate-spin" />
-                    <Trash2 v-else :size="16" />
-                    Prune Unused
+                    <BrushCleaning v-else :size="16" />
+                    Prune
                 </button>
                 <button class="btn btn-ghost" :disabled="pruning" @click="fetchContainers">
                     <RefreshCw :size="18" :class="{ 'animate-spin': loading || pruning }" />
@@ -528,7 +530,8 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 <thead>
                     <tr>
                         <th class="check-col">
-                            <input class="bulk-checkbox" type="checkbox" :checked="allPageSelected" @change="toggleSelectAllPage" />
+                            <input class="bulk-checkbox" type="checkbox" :checked="allPageSelected"
+                                @change="toggleSelectAllPage" />
                         </th>
                         <th>Name</th>
                         <th>Image</th>
@@ -541,7 +544,8 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 <tbody>
                     <tr v-for="container in paginatedContainers" :key="container.Id">
                         <td class="check-col">
-                            <input class="bulk-checkbox" type="checkbox" :checked="selectedIds.includes(container.Id)" @change="toggleSelect(container.Id)" />
+                            <input class="bulk-checkbox" type="checkbox" :checked="selectedIds.includes(container.Id)"
+                                @change="toggleSelect(container.Id)" />
                         </td>
                         <td class="name-cell">
                             <div class="container-name">
@@ -558,7 +562,8 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                         </td>
                         <td class="ports-cell">
                             <div class="ports">
-                                <span v-for="port in container.Ports" :key="`${container.Id}-${getPortKey(port)}`" class="port-tag">
+                                <span v-for="port in container.Ports" :key="`${container.Id}-${getPortKey(port)}`"
+                                    class="port-tag">
                                     {{ getPortLabel(port) }}
                                 </span>
                             </div>
@@ -566,36 +571,26 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                         <td class="time-cell">{{ dayjs.unix(container.Created).fromNow() }}</td>
                         <td class="actions-cell">
                             <div class="action-group">
-                                <button
-                                    v-if="!container.Status.includes('Up')"
-                                    class="action-btn action-start"
-                                    title="Start"
-                                    @click="handleAction('start', container.Id)">
+                                <button v-if="!container.Status.includes('Up')" class="action-btn action-start"
+                                    title="Start" @click="handleAction('start', container.Id)">
                                     <Play :size="16" />
                                 </button>
-                                <button
-                                    v-else
-                                    class="action-btn action-stop"
-                                    title="Stop"
+                                <button v-else class="action-btn action-stop" title="Stop"
                                     @click="handleAction('stop', container.Id)">
                                     <Square :size="16" />
                                 </button>
-                                <button
-                                    class="action-btn action-neutral"
-                                    :disabled="!container.Status.includes('Up')"
-                                    title="Restart"
-                                    @click="handleAction('restart', container.Id)">
+                                <button class="action-btn action-neutral" :disabled="!container.Status.includes('Up')"
+                                    title="Restart" @click="handleAction('restart', container.Id)">
                                     <RotateCw :size="16" />
                                 </button>
                                 <button class="action-btn action-neutral" title="Logs" @click="openLogs(container)">
                                     <FileText :size="16" />
                                 </button>
-                                <button class="action-btn action-neutral" title="Terminal" @click="openTerminal(container)">
+                                <button class="action-btn action-neutral" title="Terminal"
+                                    @click="openTerminal(container)">
                                     <TerminalIcon :size="16" />
                                 </button>
-                                <button
-                                    class="action-btn action-danger"
-                                    title="Remove"
+                                <button class="action-btn action-danger" title="Remove"
                                     @click="handleAction('remove', container.Id)">
                                     <Trash2 :size="16" />
                                 </button>
@@ -640,12 +635,8 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                         <button class="btn btn-ghost" @click="closeLogs">Close</button>
                     </div>
                 </div>
-                <pre
-                    ref="logsEl"
-                    class="terminal-output log-output"
-                    :style="{ fontSize: `${logsFontSize}px` }"
-                    @scroll="handleLogsScroll"
-                >{{ logsOutput }}</pre>
+                <pre ref="logsEl" class="terminal-output log-output" :style="{ fontSize: `${logsFontSize}px` }"
+                    @scroll="handleLogsScroll">{{ logsOutput }}</pre>
             </div>
         </div>
 

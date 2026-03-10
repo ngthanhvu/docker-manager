@@ -157,6 +157,20 @@ h4 {
   color: #fecaca !important;
 }
 
+.btn-icon.text-warning,
+.btn.text-warning {
+  color: #fcd34d !important;
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.btn-icon.text-warning:hover,
+.btn.text-warning:hover {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.5);
+  color: #fde68a !important;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from {

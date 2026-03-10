@@ -274,11 +274,16 @@ watch(() => appSettings.general.autoRefreshMs, () => {
   flex-grow: 1;
   min-width: 0;
   min-height: 0;
-  padding: 40px;
+  height: calc(100vh - 32px);
+  height: calc(100dvh - 32px);
+  margin: 16px 16px 16px 0;
+  padding: 28px 32px 48px;
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.2), rgba(15, 23, 42, 0.08));
 }
 
 .content-header {

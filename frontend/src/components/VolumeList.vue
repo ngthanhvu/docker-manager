@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import { HardDrive, Trash2, RefreshCw } from 'lucide-vue-next';
+import { HardDrive, Trash2, RefreshCw, BrushCleaning } from 'lucide-vue-next';
 import { dockerApi } from '../api';
 import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
@@ -181,10 +181,10 @@ onMounted(fetchVolumes);
                     <Trash2 v-else :size="16" />
                     {{ bulkDeleting ? `Deleting (${selectedCount})...` : `Delete (${selectedCount})` }}
                 </button>
-                <button class="btn btn-ghost text-danger" :disabled="bulkDeleting || !!deletingName || pruning" @click="pruneVolumes">
+                <button class="btn btn-ghost text-warning" :disabled="bulkDeleting || !!deletingName || pruning" @click="pruneVolumes">
                     <RefreshCw v-if="pruning" :size="16" class="animate-spin" />
-                    <Trash2 v-else :size="16" />
-                    Prune Unused
+                    <BrushCleaning v-else :size="16" />
+                    Prune
                 </button>
                 <button class="btn btn-ghost" :disabled="bulkDeleting || !!deletingName || pruning" @click="fetchVolumes">
                     <RefreshCw :size="18" :class="{ 'animate-spin': loading || pruning }" />

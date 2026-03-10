@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import { Box, Trash2, RefreshCw } from 'lucide-vue-next';
+import { Box, Trash2, RefreshCw, BrushCleaning } from 'lucide-vue-next';
 import { dockerApi } from '../api';
 import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
@@ -155,10 +155,10 @@ onMounted(fetchImages);
                     <Trash2 :size="16" />
                     Delete ({{ selectedCount }})
                 </button>
-                <button class="btn btn-ghost text-danger" :disabled="pruning" @click="pruneImages">
+                <button class="btn btn-ghost text-warning" :disabled="pruning" @click="pruneImages">
                     <RefreshCw v-if="pruning" :size="16" class="animate-spin" />
-                    <Trash2 v-else :size="16" />
-                    Prune Unused
+                    <BrushCleaning v-else :size="16" />
+                    Prune
                 </button>
                 <button class="btn btn-ghost" :disabled="pruning" @click="fetchImages">
                     <RefreshCw :size="18" :class="{ 'animate-spin': loading || pruning }" />
