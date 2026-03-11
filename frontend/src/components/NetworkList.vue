@@ -4,11 +4,13 @@ import { Network, Trash2, RefreshCw, BrushCleaning } from 'lucide-vue-next';
 import { dockerApi } from '../api';
 import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
+import { loadStoredNumber, persistStoredValue } from '../ui/viewState';
 
 const networks = ref<any[]>([]);
 const loading = ref(true);
 const currentPage = ref(1);
-const pageSize = ref(10);
+const NETWORK_PAGE_SIZE_KEY = 'dock-manager.networks.page-size';
+const pageSize = ref(loadStoredNumber(NETWORK_PAGE_SIZE_KEY, 10, 10, 50));
 const pageSizeOptions = [10, 20, 50];
 const selectedIds = ref<string[]>([]);
 const pruning = ref(false);
@@ -115,6 +117,7 @@ const toggleSelectAllPage = () => {
 
 watch(pageSize, () => {
     currentPage.value = 1;
+    persistStoredValue(NETWORK_PAGE_SIZE_KEY, pageSize.value);
 });
 watch(totalPages, (maxPage) => {
     if (currentPage.value > maxPage) currentPage.value = maxPage;

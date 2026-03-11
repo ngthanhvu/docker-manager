@@ -39,6 +39,7 @@ func SetupRouter() *mux.Router {
 	// Stats routes
 	r.HandleFunc("/api/info", SystemInfoHandler).Methods("GET")
 	r.HandleFunc("/api/disk-usage", DiskUsageHandler).Methods("GET")
+	r.HandleFunc("/api/dashboard/metrics", DashboardMetricsHandler).Methods("GET")
 
 	// Compose routes
 	r.HandleFunc("/api/compose/projects", ListComposeProjectsHandler).Methods("GET")
@@ -48,6 +49,8 @@ func SetupRouter() *mux.Router {
 	r.HandleFunc("/api/compose/projects/{name}/down", DownComposeProjectHandler).Methods("DELETE")
 	r.HandleFunc("/api/compose/projects/{name}/logs", ComposeProjectLogsHandler).Methods("GET")
 	r.HandleFunc("/api/compose/projects/{name}/files", ComposeProjectFilesHandler).Methods("GET")
+	r.HandleFunc("/api/compose/projects/{name}/files/validate", ValidateComposeProjectFileHandler).Methods("POST")
+	r.HandleFunc("/api/compose/projects/{name}/files", UpdateComposeProjectFileHandler).Methods("PUT")
 
 	// WebSocket routes
 	r.HandleFunc("/ws/logs/{id}", ws.LogsHandler)
@@ -235,6 +238,15 @@ func DiskUsageHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(usage)
 }
 
+func DashboardMetricsHandler(w http.ResponseWriter, r *http.Request) {
+	metrics, err := docker.GetDashboardMetrics(36)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(metrics)
+}
+
 func ListComposeProjectsHandler(w http.ResponseWriter, r *http.Request) {
 	projects, err := docker.ListComposeProjects()
 	if err != nil {
@@ -242,6 +254,26 @@ func ListComposeProjectsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(projects)
+}
+
+func ValidateComposeProjectFileHandler(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	var payload struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	result, err := docker.ValidateComposeProjectFile(name, payload.Path, payload.Content)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(result)
 }
 
 func StartComposeProjectHandler(w http.ResponseWriter, r *http.Request) {
@@ -303,4 +335,28 @@ func ComposeProjectFilesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(files)
+}
+
+func UpdateComposeProjectFileHandler(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+	var payload struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "invalid request payload", http.StatusBadRequest)
+		return
+	}
+	if payload.Path == "" {
+		http.Error(w, "path is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := docker.UpdateComposeProjectFile(name, payload.Path, payload.Content); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

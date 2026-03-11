@@ -108,6 +108,18 @@ const resetUI = () => {
                     </select>
                 </label>
                 <label class="field">
+                    <span>Terminal theme</span>
+                    <select v-model="appSettings.runtime.terminalTheme">
+                        <option value="ocean">Ocean Blue</option>
+                        <option value="matrix">Matrix Green</option>
+                        <option value="amber">Amber Gold</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Terminal font size</span>
+                    <input v-model.number="appSettings.runtime.terminalFontSize" type="number" min="11" max="20" step="1" />
+                </label>
+                <label class="field">
                     <span>Compose refresh interval</span>
                     <select v-model.number="appSettings.runtime.composeRefreshMs">
                         <option :value="0">Off</option>

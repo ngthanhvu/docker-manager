@@ -13,6 +13,7 @@ import {
 } from 'lucide-vue-next';
 import { dockerApi } from './api';
 import { appSettings } from './ui/settings';
+import { loadStoredString, persistStoredValue } from './ui/viewState';
 import Dashboard from './components/Dashboard.vue';
 import ContainerList from './components/ContainerList.vue';
 import ImageList from './components/ImageList.vue';
@@ -22,7 +23,8 @@ import ComposeList from './components/ComposeList.vue';
 import UiFeedback from './components/UiFeedback.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
 
-const activeTab = ref('dashboard');
+const APP_ACTIVE_TAB_KEY = 'dock-manager.active-tab';
+const activeTab = ref(loadStoredString(APP_ACTIVE_TAB_KEY, 'dashboard'));
 const systemInfo = ref<any>(null);
 const resourceCounts = ref<{ volumes: number; networks: number }>({ volumes: 0, networks: 0 });
 let statsTimer: number | null = null;
@@ -36,6 +38,19 @@ const tabs = [
   { id: 'compose', name: 'Compose', icon: Layers },
   { id: 'settings', name: 'Settings', icon: Settings },
 ];
+
+const validTabIds = new Set(tabs.map((tab) => tab.id));
+
+const handleGlobalShortcut = (event: KeyboardEvent) => {
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  const target = event.target as HTMLElement | null;
+  const tag = target?.tagName?.toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+  const index = Number(event.key) - 1;
+  if (!Number.isInteger(index) || index < 0 || index >= tabs.length) return;
+  event.preventDefault();
+  activeTab.value = tabs[index]?.id || activeTab.value;
+};
 
 const fetchStats = async () => {
   const [infoRes, volumesRes, networksRes] = await Promise.allSettled([
@@ -85,16 +100,27 @@ const setupStatsInterval = () => {
 };
 
 onMounted(() => {
+  if (!validTabIds.has(activeTab.value)) activeTab.value = 'dashboard';
   fetchStats();
   setupStatsInterval();
+  window.addEventListener('keydown', handleGlobalShortcut);
 });
 
 onUnmounted(() => {
   if (statsTimer) window.clearInterval(statsTimer);
+  window.removeEventListener('keydown', handleGlobalShortcut);
 });
 
 watch(() => appSettings.general.autoRefreshMs, () => {
   setupStatsInterval();
+});
+
+watch(activeTab, (next) => {
+  if (!validTabIds.has(next)) {
+    activeTab.value = 'dashboard';
+    return;
+  }
+  persistStoredValue(APP_ACTIVE_TAB_KEY, next);
 });
 </script>
 

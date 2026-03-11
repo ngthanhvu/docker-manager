@@ -4,12 +4,14 @@ import { HardDrive, Trash2, RefreshCw, BrushCleaning } from 'lucide-vue-next';
 import { dockerApi } from '../api';
 import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
+import { loadStoredNumber, persistStoredValue } from '../ui/viewState';
 import dayjs from 'dayjs';
 
 const volumes = ref<any[]>([]);
 const loading = ref(true);
 const currentPage = ref(1);
-const pageSize = ref(10);
+const VOLUME_PAGE_SIZE_KEY = 'dock-manager.volumes.page-size';
+const pageSize = ref(loadStoredNumber(VOLUME_PAGE_SIZE_KEY, 10, 10, 50));
 const pageSizeOptions = [10, 20, 50];
 const selectedNames = ref<string[]>([]);
 const deletingName = ref<string | null>(null);
@@ -158,7 +160,10 @@ const toggleSelectAllPage = () => {
     else selectedNames.value = Array.from(new Set([...selectedNames.value, ...pageVolumeNames.value]));
 };
 
-watch(pageSize, () => { currentPage.value = 1; });
+watch(pageSize, () => {
+    currentPage.value = 1;
+    persistStoredValue(VOLUME_PAGE_SIZE_KEY, pageSize.value);
+});
 watch(totalPages, (maxPage) => { if (currentPage.value > maxPage) currentPage.value = maxPage; });
 watch(volumes, (list) => {
     const valid = new Set(list.map((v) => v.Name));

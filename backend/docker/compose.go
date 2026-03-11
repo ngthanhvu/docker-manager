@@ -3,7 +3,9 @@ package docker
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/pkg/stdcopy"
+	"gopkg.in/yaml.v3"
 )
 
 type ComposeService struct {
@@ -37,6 +40,11 @@ type ComposeProjectFile struct {
 	Path    string `json:"path"`
 	Content string `json:"content,omitempty"`
 	Error   string `json:"error,omitempty"`
+}
+
+type ComposeValidationResult struct {
+	Valid bool   `json:"valid"`
+	Error string `json:"error,omitempty"`
 }
 
 func ListComposeProjects() ([]ComposeProject, error) {
@@ -210,11 +218,13 @@ func GetComposeProjectFiles(project string) ([]ComposeProjectFile, error) {
 		return nil, err
 	}
 
-	configPaths := parseConfigFiles(containers[0].Labels["com.docker.compose.project.config_files"])
-	files := make([]ComposeProjectFile, 0, len(configPaths))
-	for _, path := range configPaths {
-		f := ComposeProjectFile{Path: path}
-		content, readErr := os.ReadFile(path)
+	descriptors := listProjectFiles(containers)
+	files := make([]ComposeProjectFile, 0, len(descriptors))
+	for _, descriptor := range descriptors {
+		f := ComposeProjectFile{
+			Path: descriptor.Path,
+		}
+		content, readErr := os.ReadFile(descriptor.Path)
 		if readErr != nil {
 			f.Error = readErr.Error()
 		} else {
@@ -224,6 +234,66 @@ func GetComposeProjectFiles(project string) ([]ComposeProjectFile, error) {
 	}
 
 	return files, nil
+}
+
+func UpdateComposeProjectFile(project string, path string, content string) error {
+	containers, err := listProjectContainers(project)
+	if err != nil {
+		return err
+	}
+
+	allowed := map[string]struct{}{}
+	for _, descriptor := range listProjectFiles(containers) {
+		allowed[descriptor.Path] = struct{}{}
+	}
+
+	if _, ok := allowed[path]; !ok {
+		return fmt.Errorf("file %q is not part of compose project %q", path, project)
+	}
+
+	if writeErr := os.WriteFile(path, []byte(content), 0o644); writeErr != nil {
+		return writeErr
+	}
+
+	return nil
+}
+
+func ValidateComposeProjectFile(project string, path string, content string) (ComposeValidationResult, error) {
+	containers, err := listProjectContainers(project)
+	if err != nil {
+		return ComposeValidationResult{}, err
+	}
+
+	allowed := map[string]struct{}{}
+	for _, descriptor := range listProjectFiles(containers) {
+		allowed[descriptor.Path] = struct{}{}
+	}
+
+	if _, ok := allowed[path]; !ok {
+		return ComposeValidationResult{}, fmt.Errorf("file %q is not part of compose project %q", path, project)
+	}
+
+	for _, descriptor := range listProjectFiles(containers) {
+		source := descriptor.Path
+		payload := content
+		if descriptor.Path != path {
+			raw, readErr := os.ReadFile(descriptor.Path)
+			if readErr != nil {
+				return ComposeValidationResult{Valid: false, Error: fmt.Sprintf("%s: %v", filepath.Base(descriptor.Path), readErr)}, nil
+			}
+			payload = string(raw)
+			source = descriptor.Path
+		}
+
+		if err := validateComposeYAML(payload); err != nil {
+			return ComposeValidationResult{
+				Valid: false,
+				Error: fmt.Sprintf("%s: %v", filepath.Base(source), err),
+			}, nil
+		}
+	}
+
+	return ComposeValidationResult{Valid: true}, nil
 }
 
 func applyComposeAction(project string, action func(containerID string) error) error {
@@ -287,4 +357,64 @@ func parseConfigFiles(raw string) []string {
 		out = append(out, p)
 	}
 	return out
+}
+
+type composeFileDescriptor struct {
+	Path string
+}
+
+func listProjectFiles(containers []types.Container) []composeFileDescriptor {
+	if len(containers) == 0 {
+		return nil
+	}
+
+	labels := containers[0].Labels
+	composePaths := parseConfigFiles(labels["com.docker.compose.project.config_files"])
+
+	out := make([]composeFileDescriptor, 0, len(composePaths))
+	seen := map[string]struct{}{}
+
+	for _, path := range composePaths {
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		out = append(out, composeFileDescriptor{Path: path})
+	}
+
+	return out
+}
+
+func validateComposeYAML(content string) error {
+	decoder := yaml.NewDecoder(strings.NewReader(content))
+	decoder.KnownFields(false)
+
+	decodedDocuments := 0
+	for {
+		var node yaml.Node
+		err := decoder.Decode(&node)
+		if err == nil {
+			decodedDocuments++
+			if node.Kind != 0 && node.Kind != yaml.DocumentNode {
+				return fmt.Errorf("invalid YAML document structure")
+			}
+			if len(node.Content) > 0 {
+				root := node.Content[0]
+				if root.Kind != yaml.MappingNode && root.Kind != yaml.AliasNode {
+					return fmt.Errorf("compose root must be a mapping")
+				}
+			}
+			continue
+		}
+		if err == io.EOF {
+			break
+		}
+		return err
+	}
+
+	if decodedDocuments == 0 && strings.TrimSpace(content) != "" {
+		return fmt.Errorf("unable to parse YAML content")
+	}
+
+	return nil
 }

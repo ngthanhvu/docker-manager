@@ -9,11 +9,16 @@ import {
     Search,
     RefreshCw,
     RotateCw,
-    BrushCleaning
+    BrushCleaning,
+    Copy,
+    ClipboardPaste,
+    Maximize2,
+    Minimize2
 } from 'lucide-vue-next';
 import { dockerApi, getWsUrl } from '../api';
 import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
+import { loadStoredNumber, loadStoredString, persistStoredValue } from '../ui/viewState';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -24,13 +29,16 @@ dayjs.extend(relativeTime);
 
 const containers = ref<any[]>([]);
 const loading = ref(true);
-const searchQuery = ref('');
+const CONTAINER_SEARCH_KEY = 'dock-manager.containers.search';
+const CONTAINER_PAGE_SIZE_KEY = 'dock-manager.containers.page-size';
+const searchQuery = ref(loadStoredString(CONTAINER_SEARCH_KEY, ''));
 const activeContainer = ref<any | null>(null);
 const currentPage = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(loadStoredNumber(CONTAINER_PAGE_SIZE_KEY, 10, 10, 50));
 const pageSizeOptions = [10, 20, 50];
 const selectedIds = ref<string[]>([]);
 const pruning = ref(false);
+const searchInput = ref<HTMLInputElement | null>(null);
 
 const showLogsModal = ref(false);
 const logsOutput = ref('');
@@ -42,8 +50,9 @@ let logsSocket: WebSocket | null = null;
 
 const showTerminalModal = ref(false);
 const terminalEl = ref<HTMLDivElement | null>(null);
-const terminalFontSize = ref(13);
 const terminalModalExpanded = ref(false);
+const terminalModalPanel = ref<HTMLElement | null>(null);
+const terminalIsFullscreen = ref(false);
 let terminalSocket: WebSocket | null = null;
 let terminalReconnectTimer: number | null = null;
 let terminalReconnectAttempts = 0;
@@ -53,6 +62,90 @@ let fitAddon: FitAddon | null = null;
 let terminalResizeObserver: ResizeObserver | null = null;
 let terminalDataDisposable: { dispose: () => void } | null = null;
 let terminalContainerName = '';
+
+const terminalThemeOptions = [
+    { value: 'ocean', label: 'Ocean Blue' },
+    { value: 'matrix', label: 'Matrix Green' },
+    { value: 'amber', label: 'Amber Gold' },
+] as const;
+
+const getTerminalTheme = (themeName: 'ocean' | 'matrix' | 'amber') => {
+    if (themeName === 'matrix') {
+        return {
+            foreground: '#d1fae5',
+            background: '#03140c',
+            cursor: '#22c55e',
+            cursorAccent: '#03140c',
+            selectionBackground: 'rgba(34, 197, 94, 0.22)',
+            black: '#04130a',
+            red: '#f87171',
+            green: '#22c55e',
+            yellow: '#84cc16',
+            blue: '#34d399',
+            magenta: '#10b981',
+            cyan: '#2dd4bf',
+            white: '#d1fae5',
+            brightBlack: '#166534',
+            brightRed: '#fca5a5',
+            brightGreen: '#86efac',
+            brightYellow: '#bef264',
+            brightBlue: '#6ee7b7',
+            brightMagenta: '#34d399',
+            brightCyan: '#5eead4',
+            brightWhite: '#ecfdf5',
+        };
+    }
+
+    if (themeName === 'amber') {
+        return {
+            foreground: '#fef3c7',
+            background: '#1a1206',
+            cursor: '#f59e0b',
+            cursorAccent: '#1a1206',
+            selectionBackground: 'rgba(245, 158, 11, 0.24)',
+            black: '#120d05',
+            red: '#fb7185',
+            green: '#fbbf24',
+            yellow: '#f59e0b',
+            blue: '#fcd34d',
+            magenta: '#f97316',
+            cyan: '#fdba74',
+            white: '#fffbeb',
+            brightBlack: '#78350f',
+            brightRed: '#fda4af',
+            brightGreen: '#fde68a',
+            brightYellow: '#fcd34d',
+            brightBlue: '#fef08a',
+            brightMagenta: '#fdba74',
+            brightCyan: '#fed7aa',
+            brightWhite: '#fff7ed',
+        };
+    }
+
+    return {
+        foreground: '#dbeafe',
+        background: '#081121',
+        cursor: '#60a5fa',
+        cursorAccent: '#081121',
+        selectionBackground: 'rgba(96, 165, 250, 0.24)',
+        black: '#0f172a',
+        red: '#f87171',
+        green: '#34d399',
+        yellow: '#fbbf24',
+        blue: '#60a5fa',
+        magenta: '#c084fc',
+        cyan: '#22d3ee',
+        white: '#e2e8f0',
+        brightBlack: '#475569',
+        brightRed: '#fca5a5',
+        brightGreen: '#86efac',
+        brightYellow: '#fde68a',
+        brightBlue: '#93c5fd',
+        brightMagenta: '#d8b4fe',
+        brightCyan: '#67e8f9',
+        brightWhite: '#f8fafc',
+    };
+};
 
 const getPortKey = (port: any) => [
     port?.IP || '',
@@ -265,6 +358,10 @@ const closeLogs = () => {
 const closeTerminal = () => {
     showTerminalModal.value = false;
     terminalModalExpanded.value = false;
+    if (document.fullscreenElement === terminalModalPanel.value) {
+        document.exitFullscreen().catch(() => {});
+    }
+    terminalIsFullscreen.value = false;
     terminalManualClose = true;
     if (terminalReconnectTimer) {
         window.clearTimeout(terminalReconnectTimer);
@@ -324,21 +421,13 @@ const toggleLogsSize = () => {
 const initTerminalUi = async () => {
     await nextTick();
     if (!terminalEl.value) return;
-    const css = getComputedStyle(document.documentElement);
-    const fg = css.getPropertyValue('--code-text').trim() || '#d1d5db';
-    const bg = css.getPropertyValue('--code-bg').trim() || '#0b1220';
-    const cursor = css.getPropertyValue('--primary').trim() || '#2496ed';
+    const terminalTheme = getTerminalTheme(appSettings.runtime.terminalTheme);
     xterm = new XTerm({
         cursorBlink: true,
         fontFamily: 'JetBrains Mono, Fira Code, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace',
-        fontSize: terminalFontSize.value,
+        fontSize: appSettings.runtime.terminalFontSize,
         convertEol: true,
-        theme: {
-            foreground: fg,
-            background: bg,
-            cursor,
-            cursorAccent: bg,
-        },
+        theme: terminalTheme,
     });
     fitAddon = new FitAddon();
     xterm.loadAddon(fitAddon);
@@ -358,9 +447,9 @@ const writeTerminal = (text: string) => {
 };
 
 const adjustTerminalFontSize = (delta: number) => {
-    terminalFontSize.value = Math.min(20, Math.max(11, terminalFontSize.value + delta));
+    appSettings.runtime.terminalFontSize = Math.min(20, Math.max(11, appSettings.runtime.terminalFontSize + delta));
     if (xterm) {
-        xterm.options.fontSize = terminalFontSize.value;
+        xterm.options.fontSize = appSettings.runtime.terminalFontSize;
         fitAddon?.fit();
         xterm.focus();
     }
@@ -371,6 +460,63 @@ const toggleTerminalSize = async () => {
     await nextTick();
     fitAddon?.fit();
     xterm?.focus();
+};
+
+const copyTerminalSelection = async () => {
+    const selectedText = xterm?.getSelection()?.trim() || '';
+    if (!selectedText) {
+        feedback.warning('Select terminal text first.');
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(selectedText);
+        feedback.success('Terminal selection copied.');
+    } catch (err) {
+        feedback.error(`Failed to copy terminal text: ${err}`);
+    }
+};
+
+const pasteIntoTerminal = async () => {
+    if (!terminalSocket || terminalSocket.readyState !== WebSocket.OPEN) {
+        feedback.warning('Terminal is not connected.');
+        return;
+    }
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text) {
+            feedback.warning('Clipboard is empty.');
+            return;
+        }
+        terminalSocket.send(text);
+        xterm?.focus();
+    } catch (err) {
+        feedback.error(`Failed to paste into terminal: ${err}`);
+    }
+};
+
+const toggleTerminalFullscreen = async () => {
+    const panel = terminalModalPanel.value;
+    if (!panel) return;
+    try {
+        if (document.fullscreenElement === panel) {
+            await document.exitFullscreen();
+            terminalIsFullscreen.value = false;
+        } else {
+            await panel.requestFullscreen();
+            terminalIsFullscreen.value = true;
+        }
+        await nextTick();
+        fitAddon?.fit();
+        xterm?.focus();
+    } catch (err) {
+        feedback.error(`Failed to toggle terminal fullscreen: ${err}`);
+    }
+};
+
+const handleFullscreenChange = async () => {
+    terminalIsFullscreen.value = document.fullscreenElement === terminalModalPanel.value;
+    await nextTick();
+    fitAddon?.fit();
 };
 
 const openTerminal = async (container: any) => {
@@ -450,6 +596,17 @@ const handleVisibilityChange = () => {
     }
 };
 
+const handleListShortcut = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key !== '/') return;
+    const target = event.target as HTMLElement | null;
+    const tag = target?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return;
+    event.preventDefault();
+    searchInput.value?.focus();
+    searchInput.value?.select();
+};
+
 const setupInterval = () => {
     if (interval) clearInterval(interval);
     const ms = appSettings.general.autoRefreshMs;
@@ -461,21 +618,27 @@ onMounted(() => {
     fetchContainers();
     setupInterval();
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('keydown', handleListShortcut);
 });
 
 onUnmounted(() => {
     clearInterval(interval);
     document.removeEventListener('visibilitychange', handleVisibilityChange);
+    document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    window.removeEventListener('keydown', handleListShortcut);
     closeLogs();
     closeTerminal();
 });
 
 watch(searchQuery, () => {
     currentPage.value = 1;
+    persistStoredValue(CONTAINER_SEARCH_KEY, searchQuery.value);
 });
 
 watch(pageSize, () => {
     currentPage.value = 1;
+    persistStoredValue(CONTAINER_PAGE_SIZE_KEY, pageSize.value);
 });
 
 watch(totalPages, (maxPage) => {
@@ -490,6 +653,18 @@ watch(filteredContainers, (list) => {
 watch(() => appSettings.general.autoRefreshMs, () => {
     setupInterval();
 });
+
+watch(() => appSettings.runtime.terminalTheme, (themeName) => {
+    if (!xterm) return;
+    xterm.options.theme = getTerminalTheme(themeName);
+    fitAddon?.fit();
+});
+
+watch(() => appSettings.runtime.terminalFontSize, (fontSize) => {
+    if (!xterm) return;
+    xterm.options.fontSize = fontSize;
+    fitAddon?.fit();
+});
 </script>
 
 <template>
@@ -497,7 +672,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
         <div class="toolbar glass-panel">
             <div class="search-box">
                 <Search :size="18" />
-                <input v-model="searchQuery" type="text" placeholder="Search containers..." />
+                <input ref="searchInput" v-model="searchQuery" type="text" placeholder="Search containers..." />
             </div>
             <div class="toolbar-actions">
                 <button class="btn btn-ghost" :disabled="selectedCount === 0 || pruning" @click="bulkStart">
@@ -641,14 +816,36 @@ watch(() => appSettings.general.autoRefreshMs, () => {
         </div>
 
         <div v-if="showTerminalModal" class="modal-backdrop" @click.self="closeTerminal">
-            <div class="modal-panel glass-panel terminal-modal-panel" :class="{ 'is-expanded': terminalModalExpanded }">
+            <div ref="terminalModalPanel" class="modal-panel glass-panel terminal-modal-panel"
+                :class="{ 'is-expanded': terminalModalExpanded, 'is-fullscreen': terminalIsFullscreen }">
                 <div class="modal-header">
-                    <h3>Terminal: {{ activeContainer?.Names?.[0]?.replace('/', '') }}</h3>
+                    <div class="terminal-title-wrap">
+                        <h3>Terminal: {{ activeContainer?.Names?.[0]?.replace('/', '') }}</h3>
+                        <span class="terminal-shell-pill">{{ appSettings.runtime.terminalShell }}</span>
+                    </div>
                     <div class="modal-actions">
+                        <select v-model="appSettings.runtime.terminalTheme" class="terminal-theme-select">
+                            <option v-for="theme in terminalThemeOptions" :key="theme.value" :value="theme.value">
+                                {{ theme.label }}
+                            </option>
+                        </select>
                         <button class="btn btn-ghost" @click="adjustTerminalFontSize(-1)">A-</button>
                         <button class="btn btn-ghost" @click="adjustTerminalFontSize(1)">A+</button>
+                        <button class="btn btn-ghost" @click="copyTerminalSelection">
+                            <Copy :size="14" />
+                            Copy
+                        </button>
+                        <button class="btn btn-ghost" @click="pasteIntoTerminal">
+                            <ClipboardPaste :size="14" />
+                            Paste
+                        </button>
                         <button class="btn btn-ghost" @click="toggleTerminalSize">
                             {{ terminalModalExpanded ? 'Normal Size' : 'Expand' }}
+                        </button>
+                        <button class="btn btn-ghost" @click="toggleTerminalFullscreen">
+                            <Minimize2 v-if="terminalIsFullscreen" :size="14" />
+                            <Maximize2 v-else :size="14" />
+                            {{ terminalIsFullscreen ? 'Exit Fullscreen' : 'Fullscreen' }}
                         </button>
                         <button class="btn btn-ghost" @click="closeTerminal">Close</button>
                     </div>
@@ -1023,6 +1220,15 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     max-height: 94vh;
 }
 
+.terminal-modal-panel.is-fullscreen {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    padding: 20px;
+    resize: none;
+}
+
 .modal-header {
     display: flex;
     align-items: center;
@@ -1034,11 +1240,40 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .modal-header h3 {
     margin: 0;
     font-size: 1rem;
+}
+
+.terminal-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.terminal-shell-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(96, 165, 250, 0.28);
+    background: rgba(59, 130, 246, 0.14);
+    color: #93c5fd;
+    font-size: 0.74rem;
+    font-family: var(--font-mono);
+}
+
+.terminal-theme-select {
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    background: var(--glass);
+    color: var(--text-main);
 }
 
 .modal-actions .is-active {
@@ -1048,10 +1283,13 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 
 .terminal-output {
     height: 60vh;
+    min-height: 360px;
     margin: 0;
     border-radius: 8px;
     border: 1px solid var(--glass-border);
-    background: var(--code-bg);
+    background:
+        radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 22%),
+        linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
 }
 
 .log-output {
@@ -1069,13 +1307,42 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     overflow: hidden;
 }
 
+.terminal-modal-panel.is-fullscreen .terminal-output {
+    height: calc(100vh - 120px);
+}
+
 .terminal-xterm :deep(.xterm) {
     height: 100%;
     padding: 10px 12px;
 }
 
+.terminal-xterm :deep(.xterm-screen) {
+    background: transparent;
+}
+
 .terminal-xterm :deep(.xterm-viewport) {
     overflow-y: auto !important;
     background: transparent !important;
+}
+
+.terminal-xterm :deep(.xterm-selection div) {
+    background: rgba(96, 165, 250, 0.2) !important;
+}
+
+@media (max-width: 900px) {
+    .terminal-modal-panel,
+    .logs-modal-panel {
+        min-width: 0;
+        width: min(100%, 96vw);
+    }
+
+    .modal-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .terminal-title-wrap {
+        flex-wrap: wrap;
+    }
 }
 </style>

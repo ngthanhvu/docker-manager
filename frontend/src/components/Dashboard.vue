@@ -19,6 +19,7 @@ import {
     LegendComponent
 } from 'echarts/components';
 import { appSettings } from '../ui/settings';
+import { dockerApi } from '../api';
 
 use([
     CanvasRenderer,
@@ -38,17 +39,35 @@ const props = defineProps<{
 }>();
 
 type MonitorMode = 'network' | 'disk';
+type DashboardNetworkMetric = {
+    rxBytes: number;
+    txBytes: number;
+    rxRateBytes: number;
+    txRateBytes: number;
+};
 
-const labels = ref<string[]>([]);
-const cpuData = ref<number[]>([]);
-const memData = ref<number[]>([]);
-const netUpData = ref<number[]>([]);
-const netDownData = ref<number[]>([]);
-const diskReadData = ref<number[]>([]);
-const diskWriteData = ref<number[]>([]);
-const maxDataPoints = 36;
+type DashboardDiskMetric = {
+    readBytes: number;
+    writeBytes: number;
+    readRateBytes: number;
+    writeRateBytes: number;
+};
+
+type DashboardMetricPoint = {
+    timestamp: string;
+    cpuPercent: number;
+    memoryPercent: number;
+    memoryUsedBytes: number;
+    memoryTotalBytes: number;
+    networks: Record<string, DashboardNetworkMetric>;
+    disk: DashboardDiskMetric;
+};
+
+const metricPoints = ref<DashboardMetricPoint[]>([]);
+const networkInterfaces = ref<string[]>([]);
 const monitorMode = ref<MonitorMode>('network');
 const networkCard = ref('all');
+let interval: number | null = null;
 
 const toNumber = (value: unknown) => {
     const parsed = Number(value);
@@ -70,19 +89,55 @@ const formatBytes = (bytes: number) => {
 const formatRate = (value: number) =>
     value >= 1024 ? `${(value / 1024).toFixed(2)} MB/s` : `${value.toFixed(value >= 10 ? 1 : 2)} KB/s`;
 
-const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
-
+const labels = computed(() => metricPoints.value.map((point) => new Date(point.timestamp).toLocaleTimeString([], {
+    hour12: appSettings.general.timeFormat === '12h',
+})));
+const cpuData = computed(() => metricPoints.value.map((point) => toNumber(point.cpuPercent.toFixed(2))));
+const memData = computed(() => metricPoints.value.map((point) => toNumber(point.memoryPercent.toFixed(2))));
 const cpuPercent = computed(() => toNumber((cpuData.value[cpuData.value.length - 1] ?? 0).toFixed(2)));
 const memPercent = computed(() => toNumber((memData.value[memData.value.length - 1] ?? 0).toFixed(2)));
 const ncpu = computed(() => Math.max(1, toNumber(props.systemInfo?.NCPU || 1)));
 const loadAvg = computed(() => toNumber(((cpuPercent.value / 100) * ncpu.value).toFixed(2)));
 const loadPercent = computed(() => Math.min(100, toNumber(((loadAvg.value / ncpu.value) * 100).toFixed(2))));
 
-const memTotalBytes = computed(() => toNumber(props.systemInfo?.MemTotal || 0));
-const memUsedBytes = computed(() => toNumber((memTotalBytes.value * (memPercent.value / 100)).toFixed(0)));
+const latestMetricPoint = computed(() => metricPoints.value[metricPoints.value.length - 1] || null);
+const memTotalBytes = computed(() => toNumber(latestMetricPoint.value?.memoryTotalBytes ?? props.systemInfo?.MemTotal ?? 0));
+const memUsedBytes = computed(() => toNumber(latestMetricPoint.value?.memoryUsedBytes ?? ((memTotalBytes.value * memPercent.value) / 100)));
 
 const volumeCount = computed(() => toNumber(props.resourceCounts?.volumes ?? props.systemInfo?.Volumes ?? 0));
 const networkCount = computed(() => toNumber(props.resourceCounts?.networks ?? props.systemInfo?.Networks ?? 0));
+
+const availableNetworkCards = computed(() => ['all', ...networkInterfaces.value]);
+
+const selectedNetworkSeries = computed(() => metricPoints.value.map((point) => {
+    const entries = Object.entries(point.networks || {});
+    if (networkCard.value === 'all') {
+        return entries.reduce((acc, [, metric]) => ({
+            upRateBytes: acc.upRateBytes + toNumber(metric.txRateBytes),
+            downRateBytes: acc.downRateBytes + toNumber(metric.rxRateBytes),
+            upBytes: acc.upBytes + toNumber(metric.txBytes),
+            downBytes: acc.downBytes + toNumber(metric.rxBytes),
+        }), {
+            upRateBytes: 0,
+            downRateBytes: 0,
+            upBytes: 0,
+            downBytes: 0,
+        });
+    }
+
+    const metric = point.networks?.[networkCard.value];
+    return {
+        upRateBytes: toNumber(metric?.txRateBytes ?? 0),
+        downRateBytes: toNumber(metric?.rxRateBytes ?? 0),
+        upBytes: toNumber(metric?.txBytes ?? 0),
+        downBytes: toNumber(metric?.rxBytes ?? 0),
+    };
+}));
+
+const netUpData = computed(() => selectedNetworkSeries.value.map((point) => toNumber((point.upRateBytes / 1024).toFixed(2))));
+const netDownData = computed(() => selectedNetworkSeries.value.map((point) => toNumber((point.downRateBytes / 1024).toFixed(2))));
+const diskReadData = computed(() => metricPoints.value.map((point) => toNumber((toNumber(point.disk?.readRateBytes) / 1024).toFixed(2))));
+const diskWriteData = computed(() => metricPoints.value.map((point) => toNumber((toNumber(point.disk?.writeRateBytes) / 1024).toFixed(2))));
 
 const gauges = computed(() => ([
     {
@@ -145,12 +200,22 @@ const metricSeries = computed(() => {
 
 const latestLeftValue = computed(() => metricSeries.value.leftData[metricSeries.value.leftData.length - 1] ?? 0);
 const latestRightValue = computed(() => metricSeries.value.rightData[metricSeries.value.rightData.length - 1] ?? 0);
-const totalLeftValue = computed(() => sum(metricSeries.value.leftData));
-const totalRightValue = computed(() => sum(metricSeries.value.rightData));
+const totalLeftValue = computed(() => {
+    if (monitorMode.value === 'network') {
+        return toNumber(selectedNetworkSeries.value[selectedNetworkSeries.value.length - 1]?.upBytes ?? 0);
+    }
+    return toNumber(latestMetricPoint.value?.disk?.readBytes ?? 0);
+});
+const totalRightValue = computed(() => {
+    if (monitorMode.value === 'network') {
+        return toNumber(selectedNetworkSeries.value[selectedNetworkSeries.value.length - 1]?.downBytes ?? 0);
+    }
+    return toNumber(latestMetricPoint.value?.disk?.writeBytes ?? 0);
+});
 const maxMetricValue = computed(() => {
-    if (monitorMode.value === 'network') return 120;
-    if (monitorMode.value === 'disk') return 100;
     const peak = Math.max(40, ...metricSeries.value.leftData, ...metricSeries.value.rightData, 0);
+    if (monitorMode.value === 'network') return Math.max(120, Math.ceil(peak / 20) * 20);
+    if (monitorMode.value === 'disk') return Math.max(100, Math.ceil(peak / 20) * 20);
     return Math.ceil(peak / 20) * 20;
 });
 
@@ -159,16 +224,16 @@ const monitoringPills = computed(() => {
         return [
             { label: 'Up', value: formatRate(latestLeftValue.value) },
             { label: 'Down', value: formatRate(latestRightValue.value) },
-            { label: 'Total sent', value: formatBytes(totalLeftValue.value * 1024) },
-            { label: 'Total received', value: formatBytes(totalRightValue.value * 1024) },
+            { label: 'Total sent', value: formatBytes(totalLeftValue.value) },
+            { label: 'Total received', value: formatBytes(totalRightValue.value) },
         ];
     }
 
     return [
         { label: 'Read', value: formatRate(latestLeftValue.value) },
         { label: 'Write', value: formatRate(latestRightValue.value) },
-        { label: 'Total read', value: formatBytes(totalLeftValue.value * 1024) },
-        { label: 'Total write', value: formatBytes(totalRightValue.value * 1024) },
+        { label: 'Total read', value: formatBytes(totalLeftValue.value) },
+        { label: 'Total write', value: formatBytes(totalRightValue.value) },
     ];
 });
 
@@ -379,79 +444,26 @@ const monitoringChartOption = computed(() => ({
         }
     ],
 }));
-
-const sharpSeriesPoint = (idleMax: number, spikeMin: number, spikeMax: number, spikeChance: number) => {
-    if (Math.random() < spikeChance) {
-        return spikeMin + Math.random() * (spikeMax - spikeMin);
+const fetchMetrics = async () => {
+    try {
+        const { data } = await dockerApi.getDashboardMetrics();
+        metricPoints.value = Array.isArray(data?.points) ? data.points : [];
+        networkInterfaces.value = Array.isArray(data?.interfaces) ? data.interfaces : [];
+    } catch (err) {
+        console.error('Failed to fetch dashboard metrics:', err);
     }
-    return Math.random() * idleMax;
 };
 
-const networkTrafficPoint = () => {
-    const majorSpike = Math.random() < 0.16;
-    const down = majorSpike
-        ? 18 + Math.random() * 98
-        : sharpSeriesPoint(1.6, 8, 28, 0.2);
-    const up = majorSpike
-        ? down * (0.58 + Math.random() * 0.24)
-        : sharpSeriesPoint(1.2, 6, 18, 0.18);
-    return {
-        up: Number(up.toFixed(2)),
-        down: Number(down.toFixed(2)),
-    };
-};
-
-const diskTrafficPoint = () => {
-    const majorSpike = Math.random() < 0.14;
-    const read = majorSpike
-        ? 16 + Math.random() * 72
-        : sharpSeriesPoint(2.2, 7, 22, 0.18);
-    const write = majorSpike
-        ? read * (0.42 + Math.random() * 0.35)
-        : sharpSeriesPoint(1.8, 5, 18, 0.16);
-    return {
-        read: Number(read.toFixed(2)),
-        write: Number(write.toFixed(2)),
-    };
-};
-
-let interval: number | null = null;
 const setupInterval = () => {
     if (interval) window.clearInterval(interval);
     const ms = appSettings.general.autoRefreshMs;
     if (ms > 0) {
-        interval = window.setInterval(updateCharts, ms);
+        interval = window.setInterval(fetchMetrics, ms);
     }
 };
 
-const updateCharts = () => {
-    const now = new Date().toLocaleTimeString([], {
-        hour12: appSettings.general.timeFormat === '12h',
-    });
-
-    labels.value.push(now);
-    cpuData.value.push(Math.random() * 30 + 10);
-    memData.value.push(Math.random() * 20 + 40);
-    const networkPoint = networkTrafficPoint();
-    const diskPoint = diskTrafficPoint();
-    netUpData.value.push(networkPoint.up);
-    netDownData.value.push(networkPoint.down);
-    diskReadData.value.push(diskPoint.read);
-    diskWriteData.value.push(diskPoint.write);
-
-    if (labels.value.length > maxDataPoints) {
-        labels.value.shift();
-        cpuData.value.shift();
-        memData.value.shift();
-        netUpData.value.shift();
-        netDownData.value.shift();
-        diskReadData.value.shift();
-        diskWriteData.value.shift();
-    }
-};
-
-onMounted(() => {
-    updateCharts();
+onMounted(async () => {
+    await fetchMetrics();
     setupInterval();
 });
 
@@ -461,6 +473,12 @@ onUnmounted(() => {
 
 watch(() => appSettings.general.autoRefreshMs, () => {
     setupInterval();
+});
+
+watch(networkInterfaces, (interfaces) => {
+    if (networkCard.value !== 'all' && !interfaces.includes(networkCard.value)) {
+        networkCard.value = 'all';
+    }
 });
 </script>
 
@@ -474,7 +492,8 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                     </div>
                     <div class="header-text">
                         <h3>Containers</h3>
-                        <div class="value">{{ systemInfo?.ContainersRunning || 0 }} / {{ systemInfo?.Containers || 0 }}</div>
+                        <div class="value">{{ systemInfo?.ContainersRunning || 0 }} / {{ systemInfo?.Containers || 0 }}
+                        </div>
                     </div>
                 </div>
                 <div class="card-footer">
@@ -555,20 +574,23 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 
                     <div class="monitoring-controls">
                         <div class="monitor-tabs">
-                            <button class="monitor-tab" :class="{ active: monitorMode === 'network' }" @click="monitorMode = 'network'">
+                            <button class="monitor-tab" :class="{ active: monitorMode === 'network' }"
+                                @click="monitorMode = 'network'">
                                 Network
                             </button>
-                            <button class="monitor-tab" :class="{ active: monitorMode === 'disk' }" @click="monitorMode = 'disk'">
+                            <button class="monitor-tab" :class="{ active: monitorMode === 'disk' }"
+                                @click="monitorMode = 'disk'">
                                 Disk I/O
                             </button>
                         </div>
-
-                        <label class="monitor-select">
-                            <span>{{ monitorMode === 'network' ? 'Network card' : 'Disk group' }}</span>
+                        <label v-if="monitorMode === 'network'" class="monitor-select">
+                            <span>Interface</span>
                             <select v-model="networkCard">
-                                <option value="all">All</option>
+                                <option v-for="option in availableNetworkCards" :key="option" :value="option">
+                                    {{ option === 'all' ? 'All' : option }}
+                                </option>
                             </select>
-                            <ChevronDown :size="16" class="select-icon" />
+                            <ChevronDown class="select-icon" :size="16" />
                         </label>
                     </div>
                 </div>

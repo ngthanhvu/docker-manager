@@ -44,6 +44,7 @@ export const dockerApi = {
   // System
   getSystemInfo: () => api.get('/info'),
   getDiskUsage: () => api.get('/disk-usage'),
+  getDashboardMetrics: () => api.get('/dashboard/metrics'),
 
   // Docker Compose
   getComposeProjects: () => api.get('/compose/projects'),
@@ -54,6 +55,10 @@ export const dockerApi = {
   getComposeProjectLogs: (name: string, tail = 200) =>
     api.get(`/compose/projects/${encodeURIComponent(name)}/logs?tail=${tail}`, { responseType: 'text' }),
   getComposeProjectFiles: (name: string) => api.get(`/compose/projects/${encodeURIComponent(name)}/files`),
+  validateComposeProjectFile: (name: string, payload: { path: string; content: string }) =>
+    api.post(`/compose/projects/${encodeURIComponent(name)}/files/validate`, payload),
+  updateComposeProjectFile: (name: string, payload: { path: string; content: string }) =>
+    api.put(`/compose/projects/${encodeURIComponent(name)}/files`, payload),
 };
 
 export const getWsUrl = (path: string) => {
