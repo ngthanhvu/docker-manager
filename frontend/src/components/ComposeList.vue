@@ -820,7 +820,8 @@ watch(selectedFilePath, () => {
                                 </div>
 
                                 <div v-if="selectedFileIsEditable && (validatingCompose || composeValidationError || isDraftChanged)"
-                                    class="validation-banner" :class="{ invalid: !!composeValidationError, valid: !composeValidationError && isDraftChanged }">
+                                    class="validation-banner"
+                                    :class="{ invalid: !!composeValidationError, valid: !composeValidationError && isDraftChanged }">
                                     <span v-if="validatingCompose">Validating compose...</span>
                                     <span v-else-if="composeValidationError">{{ composeValidationError }}</span>
                                     <span v-else>Compose file is valid.</span>
@@ -851,15 +852,13 @@ watch(selectedFilePath, () => {
                                     </button>
                                 </div>
                                 <div class="editor-actions-group editor-actions-group-primary">
-                                    <button class="btn btn-primary compact-btn"
-                                        :disabled="!canSaveCompose"
+                                    <button class="btn btn-primary compact-btn" :disabled="!canSaveCompose"
                                         @click="saveSelectedFile">
                                         <Save :size="14" :class="{ 'animate-spin': savingFile }" />
                                         Save
                                     </button>
                                     <button class="btn btn-ghost compact-btn save-restart-btn"
-                                        :disabled="!canSaveCompose"
-                                        @click="saveSelectedFile(true)">
+                                        :disabled="!canSaveCompose" @click="saveSelectedFile(true)">
                                         <RotateCw :size="14" :class="{ 'animate-spin': restartingAfterSave }" />
                                         Save & Restart
                                     </button>
@@ -917,8 +916,7 @@ watch(selectedFilePath, () => {
                         <button class="btn btn-ghost compact-btn" @click="showingDiffPreview = false">
                             Close
                         </button>
-                        <button class="btn btn-primary compact-btn"
-                            :disabled="!canSaveCompose"
+                        <button class="btn btn-primary compact-btn" :disabled="!canSaveCompose"
                             @click="saveSelectedFile">
                             <Save :size="14" :class="{ 'animate-spin': savingFile && !restartingAfterSave }" />
                             Save
@@ -937,7 +935,7 @@ watch(selectedFilePath, () => {
     display: grid;
     grid-template-columns: 320px 1fr;
     gap: 16px;
-    height: calc(100vh - 210px);
+    height: calc(100vh - 135px);
     min-height: 0;
 }
 
