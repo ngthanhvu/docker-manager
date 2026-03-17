@@ -16,7 +16,7 @@ services:
 
   frontend:
     image: docker-manager-frontend:prod-build
-    ontainer_name: docker-manager-frontend
+    container_name: docker-manager-frontend
     build:
       context: .
       dockerfile: frontend/Dockerfile.prod
