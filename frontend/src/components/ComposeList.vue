@@ -1662,6 +1662,19 @@ watch(selectedFilePath, () => {
     min-width: 0;
 }
 
+.log-controls select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-color: var(--input-bg);
+    color-scheme: inherit;
+}
+
+.log-controls select option {
+    background: var(--select-option-bg);
+    color: var(--select-option-text);
+}
+
 .log-control {
     flex: 0 1 auto;
 }

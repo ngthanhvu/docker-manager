@@ -1,6 +1,7 @@
 services:
   backend:
     image: docker-manager-backend:prod-build
+    container_name: docker-manager-backend
     build:
       context: .
       dockerfile: backend/Dockerfile.prod
@@ -15,6 +16,7 @@ services:
 
   frontend:
     image: docker-manager-frontend:prod-build
+    ontainer_name: docker-manager-frontend
     build:
       context: .
       dockerfile: frontend/Dockerfile.prod

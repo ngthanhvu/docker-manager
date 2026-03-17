@@ -72,6 +72,18 @@ body {
   overflow: hidden;
 }
 
+select {
+  color-scheme: inherit;
+  background-color: var(--input-bg);
+  color: var(--text-main);
+}
+
+select option,
+select optgroup {
+  background-color: var(--select-option-bg);
+  color: var(--select-option-text);
+}
+
 h1,
 h2,
 h3,

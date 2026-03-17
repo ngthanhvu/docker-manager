@@ -215,7 +215,9 @@ onMounted(fetchVolumes);
                         <td class="check-col"><input class="bulk-checkbox" type="checkbox" :checked="selectedNames.includes(vol.Name)" :disabled="bulkDeleting || !!deletingName || pruning" @change="toggleSelect(vol.Name)" /></td>
                         <td class="name-cell">{{ vol.Name }}</td>
                         <td>{{ vol.Driver }}</td>
-                        <td><code>{{ vol.Mountpoint || '-' }}</code></td>
+                        <td class="mountpoint-cell">
+                            <code class="mountpoint-value" :title="vol.Mountpoint || '-'">{{ vol.Mountpoint || '-' }}</code>
+                        </td>
                         <td>{{ vol.CreatedAt ? dayjs(vol.CreatedAt).format('YYYY-MM-DD HH:mm') : '-' }}</td>
                         <td class="actions-cell">
                             <button class="btn-icon btn-ghost text-danger" :disabled="bulkDeleting || !!deletingName || pruning" title="Remove" @click="removeVolume(vol.Name)">
@@ -266,6 +268,16 @@ onMounted(fetchVolumes);
 .docker-table tr:last-child td { border-bottom: none; }
 .docker-table tr:hover { background: var(--glass); }
 .name-cell { font-weight: 600; word-break: break-all; }
+.mountpoint-cell { width: 300px; max-width: 300px; }
+.mountpoint-value {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
 .actions-cell { text-align: right; width: 100px; }
 .empty-state { text-align: center; color: var(--text-muted); padding: 56px 0; }
 .pagination { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }

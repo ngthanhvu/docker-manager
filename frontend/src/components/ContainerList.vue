@@ -359,7 +359,7 @@ const closeTerminal = () => {
     showTerminalModal.value = false;
     terminalModalExpanded.value = false;
     if (document.fullscreenElement === terminalModalPanel.value) {
-        document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => { });
     }
     terminalIsFullscreen.value = false;
     terminalManualClose = true;
@@ -728,7 +728,9 @@ watch(() => appSettings.runtime.terminalFontSize, (fontSize) => {
                                 <span class="id-short">{{ container.Id.substring(0, 12) }}</span>
                             </div>
                         </td>
-                        <td class="image-cell"><code class="image-name">{{ container.Image }}</code></td>
+                        <td class="image-cell">
+                            <code class="image-name" :title="container.Image">{{ container.Image }}</code>
+                        </td>
                         <td class="status-cell">
                             <div class="status-pill" :style="{ '--color': getStatusColor(container.Status) }">
                                 <span class="dot"></span>
@@ -941,7 +943,9 @@ watch(() => appSettings.runtime.terminalFontSize, (fontSize) => {
 }
 
 .image-cell {
+    width: 260px;
     min-width: 220px;
+    max-width: 260px;
 }
 
 .status-cell {
@@ -998,10 +1002,12 @@ watch(() => appSettings.runtime.terminalFontSize, (fontSize) => {
     border-radius: 6px;
     color: var(--primary);
     white-space: nowrap;
-    display: inline-block;
+    display: block;
+    width: 100%;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+    box-sizing: border-box;
 }
 
 .status-pill {
@@ -1330,6 +1336,7 @@ watch(() => appSettings.runtime.terminalFontSize, (fontSize) => {
 }
 
 @media (max-width: 900px) {
+
     .terminal-modal-panel,
     .logs-modal-panel {
         min-width: 0;

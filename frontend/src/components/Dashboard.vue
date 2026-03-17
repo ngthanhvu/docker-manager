@@ -68,92 +68,10 @@ const networkInterfaces = ref<string[]>([]);
 const monitorMode = ref<MonitorMode>('network');
 const networkCard = ref('all');
 let interval: number | null = null;
-let placeholderInterval: number | null = null;
-const hasHydratedRealMetrics = ref(false);
-const placeholderNetworkInterfaces = ['eth0', 'docker0'];
 
 const toNumber = (value: unknown) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const createPlaceholderMetricPoint = (index: number, previous?: DashboardMetricPoint): DashboardMetricPoint => {
-    const phase = index * 0.55;
-    const cpuPercent = toNumber((34 + Math.sin(phase) * 12 + Math.cos(phase * 0.45) * 4).toFixed(2));
-    const memoryPercent = toNumber((52 + Math.cos(phase * 0.6) * 7 + Math.sin(phase * 0.25) * 3).toFixed(2));
-    const memoryTotalBytes = toNumber(props.systemInfo?.MemTotal ?? (16 * 1024 ** 3));
-    const memoryUsedBytes = toNumber(((memoryTotalBytes * memoryPercent) / 100).toFixed(0));
-    const prevEth0Tx = toNumber(previous?.networks?.eth0?.txBytes ?? 44 * 1024 ** 2);
-    const prevEth0Rx = toNumber(previous?.networks?.eth0?.rxBytes ?? 76 * 1024 ** 2);
-    const prevDockerTx = toNumber(previous?.networks?.docker0?.txBytes ?? 12 * 1024 ** 2);
-    const prevDockerRx = toNumber(previous?.networks?.docker0?.rxBytes ?? 16 * 1024 ** 2);
-    const eth0TxRateBytes = toNumber((420 * 1024 + Math.sin(phase * 0.9) * 90 * 1024 + index * 320).toFixed(0));
-    const eth0RxRateBytes = toNumber((690 * 1024 + Math.cos(phase * 1.1) * 120 * 1024 + index * 410).toFixed(0));
-    const dockerTxRateBytes = toNumber((110 * 1024 + Math.sin(phase * 1.4) * 28 * 1024 + index * 120).toFixed(0));
-    const dockerRxRateBytes = toNumber((160 * 1024 + Math.cos(phase * 1.35) * 34 * 1024 + index * 160).toFixed(0));
-    const prevReadBytes = toNumber(previous?.disk?.readBytes ?? 280 * 1024 ** 2);
-    const prevWriteBytes = toNumber(previous?.disk?.writeBytes ?? 164 * 1024 ** 2);
-    const readRateBytes = toNumber((350 * 1024 + Math.sin(phase * 0.75) * 96 * 1024 + index * 210).toFixed(0));
-    const writeRateBytes = toNumber((220 * 1024 + Math.cos(phase * 0.82) * 72 * 1024 + index * 180).toFixed(0));
-
-    return {
-        timestamp: new Date(Date.now() - Math.max(0, 11 - index) * 1000).toISOString(),
-        cpuPercent,
-        memoryPercent,
-        memoryUsedBytes,
-        memoryTotalBytes,
-        networks: {
-            eth0: {
-                txRateBytes: eth0TxRateBytes,
-                rxRateBytes: eth0RxRateBytes,
-                txBytes: prevEth0Tx + eth0TxRateBytes,
-                rxBytes: prevEth0Rx + eth0RxRateBytes,
-            },
-            docker0: {
-                txRateBytes: dockerTxRateBytes,
-                rxRateBytes: dockerRxRateBytes,
-                txBytes: prevDockerTx + dockerTxRateBytes,
-                rxBytes: prevDockerRx + dockerRxRateBytes,
-            },
-        },
-        disk: {
-            readRateBytes,
-            writeRateBytes,
-            readBytes: prevReadBytes + readRateBytes,
-            writeBytes: prevWriteBytes + writeRateBytes,
-        },
-    };
-};
-
-const createPlaceholderMetricSeries = (count = 12) => {
-    const points: DashboardMetricPoint[] = [];
-    for (let index = 0; index < count; index++) {
-        points.push(createPlaceholderMetricPoint(index, points[index - 1]));
-    }
-    return points;
-};
-
-const placeholderMetricPoints = ref<DashboardMetricPoint[]>(createPlaceholderMetricSeries());
-
-const tickPlaceholderMetrics = () => {
-    const nextIndex = placeholderMetricPoints.value.length;
-    const nextPoint = createPlaceholderMetricPoint(nextIndex, placeholderMetricPoints.value[nextIndex - 1]);
-    placeholderMetricPoints.value = [...placeholderMetricPoints.value.slice(-11), nextPoint];
-};
-
-const startPlaceholderMetrics = () => {
-    if (placeholderInterval || hasHydratedRealMetrics.value) return;
-    placeholderInterval = window.setInterval(() => {
-        if (hasHydratedRealMetrics.value) return;
-        tickPlaceholderMetrics();
-    }, 900);
-};
-
-const stopPlaceholderMetrics = () => {
-    if (placeholderInterval) {
-        window.clearInterval(placeholderInterval);
-        placeholderInterval = null;
-    }
 };
 
 const formatBytes = (bytes: number) => {
@@ -171,16 +89,8 @@ const formatBytes = (bytes: number) => {
 const formatRate = (value: number) =>
     value >= 1024 ? `${(value / 1024).toFixed(2)} MB/s` : `${value.toFixed(value >= 10 ? 1 : 2)} KB/s`;
 
-const activeMetricPoints = computed(() => (
-    hasHydratedRealMetrics.value && metricPoints.value.length
-        ? metricPoints.value
-        : placeholderMetricPoints.value
-));
-const activeNetworkInterfaces = computed(() => (
-    hasHydratedRealMetrics.value && networkInterfaces.value.length
-        ? networkInterfaces.value
-        : placeholderNetworkInterfaces
-));
+const activeMetricPoints = computed(() => metricPoints.value);
+const activeNetworkInterfaces = computed(() => networkInterfaces.value);
 
 const labels = computed(() => activeMetricPoints.value.map((point) => new Date(point.timestamp).toLocaleTimeString([], {
     hour12: appSettings.general.timeFormat === '12h',
@@ -540,23 +450,12 @@ const monitoringChartOption = computed(() => ({
 const fetchMetrics = async () => {
     try {
         const { data } = await dockerApi.getDashboardMetrics();
-        const nextPoints = Array.isArray(data?.points) ? data.points : [];
-        const nextInterfaces = Array.isArray(data?.interfaces) ? data.interfaces : [];
-
-        if (nextPoints.length > 0) {
-            hasHydratedRealMetrics.value = true;
-            stopPlaceholderMetrics();
-            metricPoints.value = nextPoints;
-            networkInterfaces.value = nextInterfaces;
-            return;
-        }
-
-        if (hasHydratedRealMetrics.value) {
-            metricPoints.value = nextPoints;
-            networkInterfaces.value = nextInterfaces;
-        }
+        metricPoints.value = Array.isArray(data?.points) ? data.points : [];
+        networkInterfaces.value = Array.isArray(data?.interfaces) ? data.interfaces : [];
     } catch (err) {
         console.error('Failed to fetch dashboard metrics:', err);
+        metricPoints.value = [];
+        networkInterfaces.value = [];
     }
 };
 
@@ -569,14 +468,12 @@ const setupInterval = () => {
 };
 
 onMounted(async () => {
-    startPlaceholderMetrics();
     await fetchMetrics();
     setupInterval();
 });
 
 onUnmounted(() => {
     if (interval) window.clearInterval(interval);
-    stopPlaceholderMetrics();
 });
 
 watch(() => appSettings.general.autoRefreshMs, () => {

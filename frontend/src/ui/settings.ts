@@ -69,8 +69,8 @@ const defaults: AppSettings = {
         protectedResources: '',
     },
     about: {
-        appVersion: '0.1',
-        buildDate: '2026-03-09',
+        appVersion: '0.2',
+        buildDate: '2026-03-17',
     },
 };
 
