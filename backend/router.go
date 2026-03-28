@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"docker-ui/auth"
 	"docker-ui/docker"
 	"docker-ui/ws"
 	"github.com/docker/docker/errdefs"
@@ -12,45 +13,53 @@ import (
 func SetupRouter() *mux.Router {
 	r := mux.NewRouter()
 
+	r.HandleFunc("/api/auth/status", AuthStatusHandler).Methods("GET")
+	r.HandleFunc("/api/auth/setup", AuthSetupHandler).Methods("POST")
+	r.HandleFunc("/api/auth/login", AuthLoginHandler).Methods("POST")
+
+	api := r.PathPrefix("/api").Subrouter()
+	api.Use(authService.Middleware)
+	api.HandleFunc("/auth/logout", AuthLogoutHandler).Methods("POST")
+
 	// Container routes
-	r.HandleFunc("/api/containers", ListContainersHandler).Methods("GET")
-	r.HandleFunc("/api/containers/{id}/start", StartContainerHandler).Methods("POST")
-	r.HandleFunc("/api/containers/{id}/stop", StopContainerHandler).Methods("POST")
-	r.HandleFunc("/api/containers/{id}/restart", RestartContainerHandler).Methods("POST")
-	r.HandleFunc("/api/containers/{id}/remove", RemoveContainerHandler).Methods("DELETE")
-	r.HandleFunc("/api/containers/{id}/inspect", InspectContainerHandler).Methods("GET")
-	r.HandleFunc("/api/containers/prune", PruneContainersHandler).Methods("POST")
+	api.HandleFunc("/containers", ListContainersHandler).Methods("GET")
+	api.HandleFunc("/containers/{id}/start", StartContainerHandler).Methods("POST")
+	api.HandleFunc("/containers/{id}/stop", StopContainerHandler).Methods("POST")
+	api.HandleFunc("/containers/{id}/restart", RestartContainerHandler).Methods("POST")
+	api.HandleFunc("/containers/{id}/remove", RemoveContainerHandler).Methods("DELETE")
+	api.HandleFunc("/containers/{id}/inspect", InspectContainerHandler).Methods("GET")
+	api.HandleFunc("/containers/prune", PruneContainersHandler).Methods("POST")
 
 	// Image routes
-	r.HandleFunc("/api/images", ListImagesHandler).Methods("GET")
-	r.HandleFunc("/api/images/{id}", RemoveImageHandler).Methods("DELETE")
-	r.HandleFunc("/api/images/prune", PruneImagesHandler).Methods("POST")
+	api.HandleFunc("/images", ListImagesHandler).Methods("GET")
+	api.HandleFunc("/images/{id}", RemoveImageHandler).Methods("DELETE")
+	api.HandleFunc("/images/prune", PruneImagesHandler).Methods("POST")
 
 	// Volume routes
-	r.HandleFunc("/api/volumes", ListVolumesHandler).Methods("GET")
-	r.HandleFunc("/api/volumes/{id}", RemoveVolumeHandler).Methods("DELETE")
-	r.HandleFunc("/api/volumes/prune", PruneVolumesHandler).Methods("POST")
+	api.HandleFunc("/volumes", ListVolumesHandler).Methods("GET")
+	api.HandleFunc("/volumes/{id}", RemoveVolumeHandler).Methods("DELETE")
+	api.HandleFunc("/volumes/prune", PruneVolumesHandler).Methods("POST")
 
 	// Network routes
-	r.HandleFunc("/api/networks", ListNetworksHandler).Methods("GET")
-	r.HandleFunc("/api/networks/{id}", RemoveNetworkHandler).Methods("DELETE")
-	r.HandleFunc("/api/networks/prune", PruneNetworksHandler).Methods("POST")
+	api.HandleFunc("/networks", ListNetworksHandler).Methods("GET")
+	api.HandleFunc("/networks/{id}", RemoveNetworkHandler).Methods("DELETE")
+	api.HandleFunc("/networks/prune", PruneNetworksHandler).Methods("POST")
 
 	// Stats routes
-	r.HandleFunc("/api/info", SystemInfoHandler).Methods("GET")
-	r.HandleFunc("/api/disk-usage", DiskUsageHandler).Methods("GET")
-	r.HandleFunc("/api/dashboard/metrics", DashboardMetricsHandler).Methods("GET")
+	api.HandleFunc("/info", SystemInfoHandler).Methods("GET")
+	api.HandleFunc("/disk-usage", DiskUsageHandler).Methods("GET")
+	api.HandleFunc("/dashboard/metrics", DashboardMetricsHandler).Methods("GET")
 
 	// Compose routes
-	r.HandleFunc("/api/compose/projects", ListComposeProjectsHandler).Methods("GET")
-	r.HandleFunc("/api/compose/projects/{name}/start", StartComposeProjectHandler).Methods("POST")
-	r.HandleFunc("/api/compose/projects/{name}/stop", StopComposeProjectHandler).Methods("POST")
-	r.HandleFunc("/api/compose/projects/{name}/restart", RestartComposeProjectHandler).Methods("POST")
-	r.HandleFunc("/api/compose/projects/{name}/down", DownComposeProjectHandler).Methods("DELETE")
-	r.HandleFunc("/api/compose/projects/{name}/logs", ComposeProjectLogsHandler).Methods("GET")
-	r.HandleFunc("/api/compose/projects/{name}/files", ComposeProjectFilesHandler).Methods("GET")
-	r.HandleFunc("/api/compose/projects/{name}/files/validate", ValidateComposeProjectFileHandler).Methods("POST")
-	r.HandleFunc("/api/compose/projects/{name}/files", UpdateComposeProjectFileHandler).Methods("PUT")
+	api.HandleFunc("/compose/projects", ListComposeProjectsHandler).Methods("GET")
+	api.HandleFunc("/compose/projects/{name}/start", StartComposeProjectHandler).Methods("POST")
+	api.HandleFunc("/compose/projects/{name}/stop", StopComposeProjectHandler).Methods("POST")
+	api.HandleFunc("/compose/projects/{name}/restart", RestartComposeProjectHandler).Methods("POST")
+	api.HandleFunc("/compose/projects/{name}/down", DownComposeProjectHandler).Methods("DELETE")
+	api.HandleFunc("/compose/projects/{name}/logs", ComposeProjectLogsHandler).Methods("GET")
+	api.HandleFunc("/compose/projects/{name}/files", ComposeProjectFilesHandler).Methods("GET")
+	api.HandleFunc("/compose/projects/{name}/files/validate", ValidateComposeProjectFileHandler).Methods("POST")
+	api.HandleFunc("/compose/projects/{name}/files", UpdateComposeProjectFileHandler).Methods("PUT")
 
 	// WebSocket routes
 	r.HandleFunc("/ws/logs/{id}", ws.LogsHandler)
@@ -245,6 +254,10 @@ func DashboardMetricsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(metrics)
+}
+
+func CurrentUser(r *http.Request) *auth.User {
+	return auth.CurrentUser(r)
 }
 
 func ListComposeProjectsHandler(w http.ResponseWriter, r *http.Request) {

@@ -2,16 +2,29 @@ package ws
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
 
+	"docker-ui/auth"
 	"docker-ui/docker"
 	"github.com/docker/docker/api/types"
 	"github.com/gorilla/mux"
 )
 
 func TerminalHandler(w http.ResponseWriter, r *http.Request) {
+	if RequestAuthorizer != nil {
+		if err := RequestAuthorizer(r); err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, auth.ErrUnauthorized) {
+				status = http.StatusUnauthorized
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+	}
+
 	vars := mux.Vars(r)
 	id := vars["id"]
 

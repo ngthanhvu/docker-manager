@@ -41,41 +41,90 @@ type DashboardMetricsResponse struct {
 }
 
 var dashboardMetricsState = struct {
-	mu      sync.Mutex
-	previous *DashboardMetricPoint
-	history []DashboardMetricPoint
+	mu             sync.RWMutex
+	previous       *DashboardMetricPoint
+	history        []DashboardMetricPoint
+	interfaces     []string
+	lastCollection time.Time
+	lastError      error
+	collectorOnce  sync.Once
 }{}
+
+const (
+	defaultDashboardMetricsLimit    = 36
+	maxDashboardMetricsLimit        = 180
+	dashboardMetricsCollectInterval = 2 * time.Second
+)
 
 func GetDashboardMetrics(limit int) (DashboardMetricsResponse, error) {
 	if limit <= 0 {
-		limit = 36
+		limit = defaultDashboardMetricsLimit
 	}
-	if limit > 180 {
-		limit = 180
+	if limit > maxDashboardMetricsLimit {
+		limit = maxDashboardMetricsLimit
 	}
 
-	point, err := collectDashboardMetricPoint()
-	if err != nil {
-		return DashboardMetricsResponse{}, err
+	ensureDashboardCollector()
+
+	dashboardMetricsState.mu.RLock()
+	defer dashboardMetricsState.mu.RUnlock()
+
+	if len(dashboardMetricsState.history) == 0 && dashboardMetricsState.lastError != nil {
+		return DashboardMetricsResponse{}, dashboardMetricsState.lastError
 	}
+
+	start := 0
+	if len(dashboardMetricsState.history) > limit {
+		start = len(dashboardMetricsState.history) - limit
+	}
+
+	points := make([]DashboardMetricPoint, 0, len(dashboardMetricsState.history)-start)
+	for _, item := range dashboardMetricsState.history[start:] {
+		points = append(points, cloneDashboardMetricPoint(item))
+	}
+
+	interfaces := append([]string(nil), dashboardMetricsState.interfaces...)
+
+	return DashboardMetricsResponse{Points: points, Interfaces: interfaces}, nil
+}
+
+func ensureDashboardCollector() {
+	dashboardMetricsState.collectorOnce.Do(func() {
+		collectAndStoreDashboardMetricPoint()
+
+		go func() {
+			ticker := time.NewTicker(dashboardMetricsCollectInterval)
+			defer ticker.Stop()
+
+			for range ticker.C {
+				collectAndStoreDashboardMetricPoint()
+			}
+		}()
+	})
+}
+
+func collectAndStoreDashboardMetricPoint() {
+	point, err := collectDashboardMetricPoint()
 
 	dashboardMetricsState.mu.Lock()
 	defer dashboardMetricsState.mu.Unlock()
+
+	if err != nil {
+		dashboardMetricsState.lastError = err
+		return
+	}
 
 	applyMetricRates(dashboardMetricsState.previous, &point)
 	copiedPoint := cloneDashboardMetricPoint(point)
 	dashboardMetricsState.previous = &copiedPoint
 	dashboardMetricsState.history = append(dashboardMetricsState.history, copiedPoint)
-	if len(dashboardMetricsState.history) > limit {
-		dashboardMetricsState.history = append([]DashboardMetricPoint(nil), dashboardMetricsState.history[len(dashboardMetricsState.history)-limit:]...)
+	if len(dashboardMetricsState.history) > maxDashboardMetricsLimit {
+		dashboardMetricsState.history = append([]DashboardMetricPoint(nil), dashboardMetricsState.history[len(dashboardMetricsState.history)-maxDashboardMetricsLimit:]...)
 	}
 
-	points := make([]DashboardMetricPoint, 0, len(dashboardMetricsState.history))
 	interfaceSet := make(map[string]struct{})
 	for _, item := range dashboardMetricsState.history {
-		cloned := cloneDashboardMetricPoint(item)
-		points = append(points, cloned)
-		for name := range cloned.Networks {
+		for name := range item.Networks {
 			interfaceSet[name] = struct{}{}
 		}
 	}
@@ -86,10 +135,9 @@ func GetDashboardMetrics(limit int) (DashboardMetricsResponse, error) {
 	}
 	sort.Strings(interfaces)
 
-	return DashboardMetricsResponse{
-		Points:     points,
-		Interfaces: interfaces,
-	}, nil
+	dashboardMetricsState.interfaces = interfaces
+	dashboardMetricsState.lastCollection = copiedPoint.Timestamp
+	dashboardMetricsState.lastError = nil
 }
 
 func collectDashboardMetricPoint() (DashboardMetricPoint, error) {

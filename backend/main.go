@@ -1,16 +1,31 @@
 package main
 
 import (
+	"docker-ui/auth"
 	"log"
 	"net/http"
 	"docker-ui/docker"
+	"docker-ui/ws"
 )
+
+var authService *auth.Service
 
 func main() {
 	// Initialize Docker client
 	if err := docker.Init(); err != nil {
 		log.Fatalf("Failed to initialize Docker client: %v", err)
 	}
+
+	var err error
+	authService, err = auth.Init("")
+	if err != nil {
+		log.Fatalf("Failed to initialize auth service: %v", err)
+	}
+	defer authService.Close()
+
+	ws.RequestAuthorizer = authService.AuthorizeRequest
+
+	docker.GetDashboardMetrics(1)
 
 	router := SetupRouter()
 
