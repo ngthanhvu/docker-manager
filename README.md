@@ -2,8 +2,13 @@
 
 Ứng dụng desktop quản lý Docker mạnh mẽ với giao diện trực quan, cho phép theo dõi và điều khiển toàn bộ hệ thống Docker từ một nơi duy nhất.
 
-![Dock Manager Dashboard](./docs/screenshot.png)
+[![Stars](https://img.shields.io/github/stars/ngthanhvu/docker-manager?style=for-the-badge)](https://github.com/ngthanhvu/docker-manager/stargazers)
+[![Forks](https://img.shields.io/github/forks/ngthanhvu/docker-manager?style=for-the-badge)](https://github.com/ngthanhvu/docker-manager/forks)
+[![License](https://img.shields.io/github/license/ngthanhvu/docker-manager?style=for-the-badge)](./LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/ngthanhvu/docker-manager?style=for-the-badge)](https://github.com/ngthanhvu/docker-manager/commits/main)
+[![Tauri](https://img.shields.io/badge/Tauri-v2-24C8DB?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app/)
 
+![Docker Manager Dashboard](./docs/screenshot.png)
 ## Tính năng chính
 
 - **Dashboard**: Theo dõi sức khỏe hệ thống, tài nguyên và throughput của Docker theo thời gian thực
@@ -28,12 +33,12 @@
 ```
 docker-manager/
 ├── frontend/          # Giao diện Vue 3 với các component UI
-── backend/           # REST API Go xử lý các thao tác Docker
+├── backend/           # REST API Go xử lý các thao tác Docker
 ├── src-tauri/         # Cấu hình và mã nguồn Tauri desktop
 ├── docker-compose.yml # Cấu hình dev environment
 ├── docker-compose.prod.yml # Cấu hình production environment
 ├── run-dev.sh         # Script chạy dev environment
-── run-prod.sh        # Script chạy production environment
+└── run-prod.sh        # Script chạy production environment
 ```
 
 ## Yêu cầu môi trường
@@ -168,7 +173,7 @@ Nhập username và password/token của bạn.
 | `dockerhub_username` | ✅ | - | Username Docker Hub của bạn |
 | `repo_prefix` | ✅ | - | Tiền tố tên repository (ví dụ: `docker-manager`) |
 | `service` | ❌ | `all` | Service cần push: `backend`, `frontend`, hoặc `all` |
-| `tag` |  | `latest` | Version tag cho image |
+| `tag` | ❌ | `latest` | Version tag cho image |
 
 **Ví dụ:**
 
@@ -202,3 +207,11 @@ docker pull yourname/docker-manager-frontend:v1.0.0
 # Chạy với docker-compose
 docker-compose -f docker-compose.prod.yml up -d
 ```
+
+---
+
+## Languages / Ngôn ngữ / 语言
+
+- [English](README.en.md)
+- [Tiếng Việt](README.md)
+- [中文](README.zh.md)
