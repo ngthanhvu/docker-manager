@@ -129,6 +129,13 @@ const en = {
     updateConfirm: 'Update Docker Manager to version {version} now? The UI may reconnect while the stack is restarted.',
     updatePrompt: 'A newer Docker Manager version {version} is available. Do you want to update now?',
     updateStarted: 'Update started. The page may reconnect in a few seconds.',
+    updateInProgress: 'Updating',
+    openUpdateConsole: 'Open update console',
+    updateConsoleTitle: 'Update terminal',
+    updateConsoleHelp: 'The update progress will stream here in real time. If the connection drops while containers restart, reopen this window to see the latest logs.',
+    updateConsoleStarting: 'Sending update request...',
+    updateConsoleSocketError: 'Could not connect to the update log stream.',
+    updateConsoleSocketClosed: 'The update log stream was closed. This is normal while the stack is restarting.',
   },
   dashboard: {
     statusRings: 'Status Rings',

@@ -129,6 +129,13 @@ const vi = {
     updateConfirm: 'Cập nhật Docker Manager lên phiên bản {version} ngay bây giờ? Giao diện có thể ngắt kết nối trong lúc stack được khởi động lại.',
     updatePrompt: 'Đã có phiên bản Docker Manager mới {version}. Bạn có muốn cập nhật ngay không?',
     updateStarted: 'Đã bắt đầu cập nhật. Trang có thể tự kết nối lại sau vài giây.',
+    updateInProgress: 'Đang cập nhật',
+    openUpdateConsole: 'Mở cửa sổ cập nhật',
+    updateConsoleTitle: 'Terminal cập nhật',
+    updateConsoleHelp: 'Tiến trình cập nhật sẽ hiển thị ở đây theo thời gian thực. Nếu kết nối bị ngắt khi container khởi động lại, bạn có thể mở lại cửa sổ này để xem log mới nhất.',
+    updateConsoleStarting: 'Đang gửi yêu cầu cập nhật...',
+    updateConsoleSocketError: 'Không thể kết nối luồng log cập nhật.',
+    updateConsoleSocketClosed: 'Luồng log cập nhật đã ngắt. Nếu hệ thống đang restart thì đây là trạng thái bình thường.',
   },
   dashboard: {
     statusRings: 'Trạng thái hệ thống',

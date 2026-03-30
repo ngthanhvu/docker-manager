@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,10 +17,14 @@ import (
 	"sync"
 	"time"
 
+	"docker-ui/auth"
 	"docker-ui/docker"
+	"docker-ui/ws"
 	dockertypes "github.com/docker/docker/api/types"
 	dockercontainer "github.com/docker/docker/api/types/container"
 	dockerimage "github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/gorilla/websocket"
 )
 
 type dockerHubTag struct {
@@ -54,10 +60,160 @@ type appUpdateApplyResponse struct {
 	Message       string `json:"message"`
 }
 
+type appUpdateStatusResponse struct {
+	InProgress    bool   `json:"inProgress"`
+	TargetVersion string `json:"targetVersion,omitempty"`
+	Message       string `json:"message"`
+	StartedAt     string `json:"startedAt,omitempty"`
+	FinishedAt    string `json:"finishedAt,omitempty"`
+	Succeeded     bool   `json:"succeeded"`
+}
+
 var appUpdateHTTPClient = &http.Client{Timeout: 10 * time.Second}
 var appUpdateApplyState struct {
 	sync.Mutex
 	inProgress bool
+}
+var appUpdateLogState = newUpdateLogState()
+
+type updateLogState struct {
+	sync.Mutex
+	inProgress    bool
+	targetVersion string
+	startedAt     time.Time
+	finishedAt    time.Time
+	succeeded     bool
+	message       string
+	buffer        []string
+	bufferBytes   int
+	subscribers   map[int]chan string
+	nextID        int
+}
+
+func newUpdateLogState() *updateLogState {
+	return &updateLogState{
+		subscribers: make(map[int]chan string),
+	}
+}
+
+func (s *updateLogState) begin(targetVersion string) {
+	s.Lock()
+	defer s.Unlock()
+	s.inProgress = true
+	s.targetVersion = targetVersion
+	s.startedAt = time.Now().UTC()
+	s.finishedAt = time.Time{}
+	s.succeeded = false
+	s.message = fmt.Sprintf("Starting Docker Manager update to version %s.", targetVersion)
+	s.buffer = nil
+	s.bufferBytes = 0
+}
+
+func (s *updateLogState) append(text string) {
+	if text == "" {
+		return
+	}
+
+	s.Lock()
+	s.buffer = append(s.buffer, text)
+	s.bufferBytes += len(text)
+	for s.bufferBytes > 256*1024 && len(s.buffer) > 1 {
+		s.bufferBytes -= len(s.buffer[0])
+		s.buffer = s.buffer[1:]
+	}
+	if lastLine := latestLogLine(text); lastLine != "" {
+		s.message = lastLine
+	}
+	subscribers := make([]chan string, 0, len(s.subscribers))
+	for _, ch := range s.subscribers {
+		subscribers = append(subscribers, ch)
+	}
+	s.Unlock()
+
+	for _, ch := range subscribers {
+		select {
+		case ch <- text:
+		default:
+		}
+	}
+}
+
+func (s *updateLogState) finish(success bool, message string) {
+	s.Lock()
+	defer s.Unlock()
+	s.inProgress = false
+	s.finishedAt = time.Now().UTC()
+	s.succeeded = success
+	if strings.TrimSpace(message) != "" {
+		s.message = strings.TrimSpace(message)
+	}
+}
+
+func (s *updateLogState) subscribe() (int, chan string, string) {
+	s.Lock()
+	defer s.Unlock()
+	id := s.nextID
+	s.nextID++
+	ch := make(chan string, 64)
+	s.subscribers[id] = ch
+	return id, ch, strings.Join(s.buffer, "")
+}
+
+func (s *updateLogState) unsubscribe(id int) {
+	s.Lock()
+	if _, ok := s.subscribers[id]; ok {
+		delete(s.subscribers, id)
+	}
+	s.Unlock()
+}
+
+func (s *updateLogState) status() appUpdateStatusResponse {
+	s.Lock()
+	defer s.Unlock()
+
+	resp := appUpdateStatusResponse{
+		InProgress:    s.inProgress,
+		TargetVersion: s.targetVersion,
+		Message:       s.message,
+		Succeeded:     s.succeeded,
+	}
+	if !s.startedAt.IsZero() {
+		resp.StartedAt = s.startedAt.Format(time.RFC3339)
+	}
+	if !s.finishedAt.IsZero() {
+		resp.FinishedAt = s.finishedAt.Format(time.RFC3339)
+	}
+	return resp
+}
+
+func latestLogLine(text string) string {
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+type appUpdateLogWriter struct{}
+
+func (w *appUpdateLogWriter) Write(p []byte) (int, error) {
+	appUpdateLogState.append(string(p))
+	return len(p), nil
+}
+
+func isIgnorableUpdateLogError(err error) bool {
+	if err == nil {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "use of closed network connection") ||
+		strings.Contains(message, "context canceled") ||
+		strings.Contains(message, "response body closed") ||
+		strings.Contains(message, "file already closed") ||
+		message == "eof"
 }
 
 func CheckAppUpdatesHandler(w http.ResponseWriter, r *http.Request) {
@@ -84,6 +240,11 @@ func CheckAppUpdatesHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(result)
+}
+
+func GetAppUpdateStatusHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(appUpdateLogState.status())
 }
 
 func ApplyAppUpdateHandler(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +287,8 @@ func ApplyAppUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	appUpdateApplyState.inProgress = true
 	appUpdateApplyState.Unlock()
+	appUpdateLogState.begin(targetVersion)
+	appUpdateLogState.append(fmt.Sprintf("[update] preparing version %s\n", targetVersion))
 
 	go func() {
 		defer func() {
@@ -135,10 +298,14 @@ func ApplyAppUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		if err := applySelfUpdate(namespace, repoPrefix, targetVersion); err != nil {
+			appUpdateLogState.append(fmt.Sprintf("[error] %v\n", err))
+			appUpdateLogState.finish(false, err.Error())
 			log.Printf("App update failed: %v", err)
 			return
 		}
 
+		appUpdateLogState.append(fmt.Sprintf("[done] update commands finished for version %s\n", targetVersion))
+		appUpdateLogState.finish(true, fmt.Sprintf("Update commands finished for version %s.", targetVersion))
 		log.Printf("App update started successfully for version %s", targetVersion)
 	}()
 
@@ -148,6 +315,59 @@ func ApplyAppUpdateHandler(w http.ResponseWriter, r *http.Request) {
 		TargetVersion: targetVersion,
 		Message:       fmt.Sprintf("Started updating Docker Manager to version %s. The UI may reconnect while containers are being recreated.", targetVersion),
 	})
+}
+
+func AppUpdateLogsWSHandler(w http.ResponseWriter, r *http.Request) {
+	if ws.RequestAuthorizer != nil {
+		if err := ws.RequestAuthorizer(r); err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, auth.ErrUnauthorized) {
+				status = http.StatusUnauthorized
+			}
+			http.Error(w, err.Error(), status)
+			return
+		}
+	}
+
+	conn, err := ws.Upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("Failed to upgrade update log connection: %v", err)
+		return
+	}
+	defer conn.Close()
+
+	subID, ch, snapshot := appUpdateLogState.subscribe()
+	defer appUpdateLogState.unsubscribe(subID)
+
+	if snapshot != "" {
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(snapshot)); err != nil {
+			return
+		}
+	}
+
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case <-readDone:
+			return
+		case msg, ok := <-ch:
+			if !ok {
+				return
+			}
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(msg)); err != nil {
+				return
+			}
+		}
+	}
 }
 
 func checkDockerHubFrontendUpdate(currentVersion string, namespace string, repoPrefix string) (*appUpdateCheckResponse, error) {
@@ -305,6 +525,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 func applySelfUpdate(namespace string, repoPrefix string, targetVersion string) error {
+	appUpdateLogState.append("[update] locating current Docker Manager container\n")
 	self, err := findSelfContainer()
 	if err != nil {
 		return err
@@ -334,9 +555,13 @@ func applySelfUpdate(namespace string, repoPrefix string, targetVersion string) 
 	if len(resolvedFiles) == 0 {
 		return fmt.Errorf("no usable compose files found for the current Docker Manager instance")
 	}
+	appUpdateLogState.append(fmt.Sprintf("[update] compose working directory: %s\n", workingDir))
+	appUpdateLogState.append(fmt.Sprintf("[update] compose files:\n- %s\n", strings.Join(resolvedFiles, "\n- ")))
 
 	backendImage := fmt.Sprintf("%s/%s-backend:%s", namespace, repoPrefix, targetVersion)
 	frontendImage := fmt.Sprintf("%s/%s-frontend:%s", namespace, repoPrefix, targetVersion)
+	appUpdateLogState.append(fmt.Sprintf("[update] backend image -> %s\n", backendImage))
+	appUpdateLogState.append(fmt.Sprintf("[update] frontend image -> %s\n", frontendImage))
 
 	if err := runComposeHelper(
 		workingDir,
@@ -421,6 +646,7 @@ func buildComposeFileArgs(configFiles []string) string {
 func buildSelfUpdateScript(configFiles []string, backendImage string, frontendImage string) string {
 	var script strings.Builder
 	script.WriteString("set -eu\n")
+	script.WriteString("set -x\n")
 	script.WriteString("changed=0\n")
 	script.WriteString(fmt.Sprintf("backend_image=%s\n", shellQuote(backendImage)))
 	script.WriteString(fmt.Sprintf("frontend_image=%s\n", shellQuote(frontendImage)))
@@ -525,12 +751,14 @@ func runComposeHelper(workingDir string, configFiles []string, script string) er
 	}
 
 	helperImage := "docker:cli"
+	appUpdateLogState.append(fmt.Sprintf("[update] pulling helper image %s\n", helperImage))
 	pullResp, err := docker.Cli.ImagePull(docker.Ctx(), helperImage, dockerimage.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("pull helper image %s: %w", helperImage, err)
 	}
 	_, _ = io.Copy(io.Discard, pullResp)
 	_ = pullResp.Close()
+	appUpdateLogState.append("[update] helper image ready\n")
 
 	helper, err := docker.Cli.ContainerCreate(
 		docker.Ctx(),
@@ -556,23 +784,57 @@ func runComposeHelper(workingDir string, configFiles []string, script string) er
 	defer func() {
 		_ = docker.Cli.ContainerRemove(docker.Ctx(), helper.ID, dockercontainer.RemoveOptions{Force: true})
 	}()
+	appUpdateLogState.append(fmt.Sprintf("[update] helper container created: %s\n", helper.ID[:12]))
 
 	if err := docker.Cli.ContainerStart(docker.Ctx(), helper.ID, dockercontainer.StartOptions{}); err != nil {
 		return fmt.Errorf("start helper container: %w", err)
+	}
+	appUpdateLogState.append("[update] helper container started\n")
+
+	logReader, err := docker.Cli.ContainerLogs(docker.Ctx(), helper.ID, dockercontainer.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+	})
+	if err != nil {
+		appUpdateLogState.append(fmt.Sprintf("[warn] unable to attach live helper logs: %v\n", err))
+	}
+	logDone := make(chan struct{})
+	if err == nil {
+		go func() {
+			defer close(logDone)
+			defer logReader.Close()
+			writer := &appUpdateLogWriter{}
+			if _, copyErr := stdcopy.StdCopy(writer, writer, logReader); !isIgnorableUpdateLogError(copyErr) {
+				appUpdateLogState.append(fmt.Sprintf("[warn] update log stream closed: %v\n", copyErr))
+			}
+		}()
+	} else {
+		close(logDone)
 	}
 
 	waitCh, errCh := docker.Cli.ContainerWait(docker.Ctx(), helper.ID, dockercontainer.WaitConditionNotRunning)
 	select {
 	case waitErr := <-errCh:
 		if waitErr != nil {
+			if logReader != nil {
+				logReader.Close()
+			}
+			<-logDone
 			return fmt.Errorf("wait helper container: %w", waitErr)
 		}
 	case result := <-waitCh:
+		if logReader != nil {
+			logReader.Close()
+		}
+		<-logDone
 		if result.StatusCode != 0 {
 			logs, _ := readHelperLogs(helper.ID)
 			return fmt.Errorf("compose update helper exited with status %d: %s", result.StatusCode, strings.TrimSpace(logs))
 		}
 	}
+
+	appUpdateLogState.append("[done] docker compose pull/up completed\n")
 
 	return nil
 }
@@ -587,9 +849,9 @@ func readHelperLogs(containerID string) (string, error) {
 	}
 	defer reader.Close()
 
-	raw, err := io.ReadAll(reader)
-	if err != nil {
+	var output bytes.Buffer
+	if _, err := stdcopy.StdCopy(&output, &output, reader); err != nil {
 		return "", err
 	}
-	return string(raw), nil
+	return output.String(), nil
 }

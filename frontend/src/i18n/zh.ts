@@ -129,6 +129,13 @@ const zh = {
     updateConfirm: '现在将 Docker Manager 更新到版本 {version} 吗？在堆栈重启期间，界面可能会短暂断开连接。',
     updatePrompt: '发现新的 Docker Manager 版本 {version}。是否现在更新？',
     updateStarted: '更新已开始，页面可能会在几秒后重新连接。',
+    updateInProgress: '更新中',
+    openUpdateConsole: '打开更新窗口',
+    updateConsoleTitle: '更新终端',
+    updateConsoleHelp: '更新进度会实时显示在这里。如果容器重启时连接中断，可以重新打开这个窗口查看最新日志。',
+    updateConsoleStarting: '正在发送更新请求...',
+    updateConsoleSocketError: '无法连接到更新日志流。',
+    updateConsoleSocketClosed: '更新日志流已断开。如果系统正在重启，这是正常现象。',
   },
   dashboard: {
     statusRings: '状态环',

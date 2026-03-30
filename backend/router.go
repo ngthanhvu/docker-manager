@@ -50,6 +50,7 @@ func SetupRouter() *mux.Router {
 	api.HandleFunc("/disk-usage", DiskUsageHandler).Methods("GET")
 	api.HandleFunc("/dashboard/metrics", DashboardMetricsHandler).Methods("GET")
 	api.HandleFunc("/app-updates/check", CheckAppUpdatesHandler).Methods("GET")
+	api.HandleFunc("/app-updates/status", GetAppUpdateStatusHandler).Methods("GET")
 	api.HandleFunc("/app-updates/apply", ApplyAppUpdateHandler).Methods("POST")
 
 	// Compose routes
@@ -66,6 +67,7 @@ func SetupRouter() *mux.Router {
 	// WebSocket routes
 	r.HandleFunc("/ws/logs/{id}", ws.LogsHandler)
 	r.HandleFunc("/ws/terminal/{id}", ws.TerminalHandler)
+	r.HandleFunc("/ws/app-updates", AppUpdateLogsWSHandler)
 
 	return r
 }

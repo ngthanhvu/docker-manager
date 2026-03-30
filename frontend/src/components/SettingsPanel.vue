@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { getWsUrl } from '../api';
 import { appSettings } from '../ui/settings';
 import { updates } from '../ui/updates';
 import { feedback } from '../ui/feedback';
@@ -36,7 +37,16 @@ const resetUI = () => {
 };
 
 const updateState = updates.state;
+const showUpdateConsole = ref(false);
+const updateConsoleOutput = ref('');
+const updateConsoleEl = ref<HTMLElement | null>(null);
+const updateConsoleFollow = ref(true);
+let updateConsoleSocket: WebSocket | null = null;
+
 const updateStatusTone = computed(() => {
+  if (updateState.applying) {
+    return 'border-color: rgba(96, 165, 250, 0.36); color: #bfdbfe; background: rgba(59, 130, 246, 0.14);';
+  }
   switch (updateState.status) {
     case 'available':
       return 'border-color: var(--warning-soft-border); color: var(--warning-soft-text); background: var(--warning-soft-bg);';
@@ -60,6 +70,9 @@ const releaseDateLabel = computed(() => {
 });
 
 const statusLabel = computed(() => {
+  if (updateState.applying) {
+    return t('settings.updateInProgress');
+  }
   switch (updateState.status) {
     case 'checking':
       return t('settings.updateChecking');
@@ -73,6 +86,63 @@ const statusLabel = computed(() => {
       return t('settings.updateIdle');
   }
 });
+
+const stripAnsi = (text: string) => text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+
+const isUpdateConsoleNearBottom = () => {
+  const el = updateConsoleEl.value;
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+};
+
+const scrollUpdateConsoleToBottom = async () => {
+  await nextTick();
+  const el = updateConsoleEl.value;
+  if (el) el.scrollTop = el.scrollHeight;
+};
+
+const appendUpdateConsole = (text: string) => {
+  const shouldStickToBottom = updateConsoleFollow.value && isUpdateConsoleNearBottom();
+  updateConsoleOutput.value += stripAnsi(text);
+  if (shouldStickToBottom) {
+    void scrollUpdateConsoleToBottom();
+  }
+};
+
+const handleUpdateConsoleScroll = () => {
+  updateConsoleFollow.value = isUpdateConsoleNearBottom();
+};
+
+const disconnectUpdateConsole = () => {
+  if (updateConsoleSocket) {
+    updateConsoleSocket.close();
+    updateConsoleSocket = null;
+  }
+};
+
+const connectUpdateConsole = () => {
+  disconnectUpdateConsole();
+  updateConsoleSocket = new WebSocket(getWsUrl('/app-updates'));
+  updateConsoleSocket.onmessage = (event) => appendUpdateConsole(String(event.data));
+  updateConsoleSocket.onerror = () => appendUpdateConsole(`\n[error] ${t('settings.updateConsoleSocketError')}\n`);
+  updateConsoleSocket.onclose = () => {
+    updateConsoleSocket = null;
+    appendUpdateConsole(`\n[closed] ${t('settings.updateConsoleSocketClosed')}\n`);
+    void updates.syncStatus().catch(() => undefined);
+  };
+};
+
+const openUpdateConsole = () => {
+  showUpdateConsole.value = true;
+  updateConsoleOutput.value = '';
+  updateConsoleFollow.value = true;
+  connectUpdateConsole();
+};
+
+const closeUpdateConsole = () => {
+  showUpdateConsole.value = false;
+  disconnectUpdateConsole();
+};
 
 const checkUpdates = async (silent = false) => {
   try {
@@ -99,21 +169,32 @@ const applyUpdate = async () => {
   });
   if (!accepted) return;
 
+  openUpdateConsole();
+  appendUpdateConsole(`[info] ${t('settings.updateConsoleStarting')}\n`);
+
   try {
     const result = await updates.apply();
     feedback.info(result.message || t('settings.updateStarted'));
-    window.setTimeout(() => {
-      window.location.reload();
-    }, 12000);
-  } catch {
-    feedback.error(updateState.message || t('common.actionFailed'));
+  } catch (error) {
+    appendUpdateConsole(`[error] ${error instanceof Error ? error.message : t('common.actionFailed')}\n`);
+    feedback.error(error instanceof Error ? error.message : (updateState.message || t('common.actionFailed')));
   }
 };
 
 onMounted(() => {
+  void updates.syncStatus().catch(() => undefined);
   if (appSettings.updates.autoCheck && !updateState.checkedAt && updateState.status === 'idle') {
     void checkUpdates(true);
   }
+});
+
+onUnmounted(() => {
+  disconnectUpdateConsole();
+  document.body.style.overflow = '';
+});
+
+watch(showUpdateConsole, (open) => {
+  document.body.style.overflow = open ? 'hidden' : '';
 });
 </script>
 
@@ -343,6 +424,14 @@ onMounted(() => {
             <button
               class="btn btn-ghost"
               type="button"
+              :disabled="updateState.status === 'checking' || (!updateState.applying && !updateConsoleOutput)"
+              @click="openUpdateConsole"
+            >
+              {{ t('settings.openUpdateConsole') }}
+            </button>
+            <button
+              class="btn btn-ghost"
+              type="button"
               :disabled="updateState.status === 'checking'"
               @click="openUpdatePage"
             >
@@ -406,5 +495,112 @@ onMounted(() => {
         </div>
       </section>
     </div>
+
+    <div v-if="showUpdateConsole" class="update-console-backdrop" @click.self="closeUpdateConsole">
+      <div class="update-console-panel">
+        <div class="update-console-header">
+          <div>
+            <p class="section-heading mb-0">{{ t('settings.openUpdateConsole') }}</p>
+            <h3 class="update-console-title">{{ t('settings.updateConsoleTitle') }}</h3>
+          </div>
+          <button class="btn btn-ghost" type="button" @click="closeUpdateConsole">
+            {{ t('common.close') }}
+          </button>
+        </div>
+
+        <p class="update-console-help">
+          {{ t('settings.updateConsoleHelp') }}
+        </p>
+
+        <pre ref="updateConsoleEl" class="update-console-output" @scroll="handleUpdateConsoleScroll">{{ updateConsoleOutput }}</pre>
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.update-console-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.update-console-panel {
+  width: min(980px, 100%);
+  max-height: min(82vh, 860px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  border-radius: 22px;
+  padding: 22px;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 28%),
+    linear-gradient(180deg, rgba(7, 14, 27, 0.96), rgba(3, 7, 18, 0.98));
+  box-shadow: 0 24px 70px rgba(2, 6, 23, 0.45);
+}
+
+.update-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.update-console-title {
+  margin: 6px 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.update-console-help {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.update-console-output {
+  flex: 1;
+  min-height: 360px;
+  margin: 0;
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
+  color: #dbeafe;
+  font: 13px/1.7 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 768px) {
+  .update-console-backdrop {
+    padding: 12px;
+  }
+
+  .update-console-panel {
+    max-height: calc(100vh - 24px);
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .update-console-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .update-console-output {
+    min-height: 280px;
+  }
+}
+</style>

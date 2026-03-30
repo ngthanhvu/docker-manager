@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { reactive } from 'vue';
 import { dockerApi } from '../api';
 import { appSettings } from './settings';
@@ -19,6 +20,15 @@ type UpdateApplyResult = {
   message: string;
 };
 
+type UpdateApplyStatus = {
+  inProgress?: boolean;
+  targetVersion?: string;
+  message?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  succeeded?: boolean;
+};
+
 const state = reactive({
   status: 'idle' as UpdateStatus,
   currentVersion: appSettings.about.appVersion,
@@ -37,6 +47,13 @@ const getUpdateUrl = () => {
 };
 
 const formatError = (error: unknown) => {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    if (typeof data === 'string' && data.trim()) return data.trim();
+    if (data && typeof data === 'object' && 'message' in data && typeof data.message === 'string' && data.message.trim()) {
+      return data.message.trim();
+    }
+  }
   if (error instanceof Error && error.message) return error.message;
   return 'Unable to reach Docker Hub right now.';
 };
@@ -103,6 +120,19 @@ const openUpdateUrl = () => {
   window.open(target, '_blank', 'noopener,noreferrer');
 };
 
+const syncStatus = async (): Promise<UpdateApplyStatus> => {
+  const response = await dockerApi.getAppUpdateStatus();
+  const payload = (response.data || {}) as UpdateApplyStatus;
+  state.applying = !!payload.inProgress;
+  if (payload.targetVersion && !state.latestVersion) {
+    state.latestVersion = payload.targetVersion;
+  }
+  if (payload.message) {
+    state.message = payload.message;
+  }
+  return payload;
+};
+
 const apply = async (): Promise<UpdateApplyResult> => {
   const namespace = appSettings.updates.dockerHubNamespace.trim();
   const repoPrefix = appSettings.updates.dockerHubRepoPrefix.trim();
@@ -125,12 +155,16 @@ const apply = async (): Promise<UpdateApplyResult> => {
     state.message = payload.message || `Started updating to version ${state.latestVersion}.`;
     return {
       started: payload.started !== false,
-      targetVersion: payload.targetVersion || state.latestVersion,
+      targetVersion: payload.targetVersion || state.latestVersion || '',
       message: payload.message || state.message,
     };
   } catch (error) {
-    state.applying = false;
-    throw error;
+    try {
+      await syncStatus();
+    } catch {
+      state.applying = false;
+    }
+    throw new Error(formatError(error));
   }
 };
 
@@ -138,5 +172,6 @@ export const updates = {
   state,
   refresh,
   apply,
+  syncStatus,
   openUpdateUrl,
 };
