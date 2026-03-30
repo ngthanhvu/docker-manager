@@ -314,10 +314,7 @@ func applySelfUpdate(namespace string, repoPrefix string, targetVersion string) 
 	workingDir := strings.TrimSpace(labels["com.docker.compose.project.working_dir"])
 	configFiles := parseUpdateConfigFiles(labels["com.docker.compose.project.config_files"])
 	if len(configFiles) == 0 && workingDir != "" {
-		defaultCompose := filepath.Join(workingDir, "docker-compose.yml")
-		if _, statErr := os.Stat(defaultCompose); statErr == nil {
-			configFiles = []string{defaultCompose}
-		}
+		configFiles = []string{filepath.Join(workingDir, "docker-compose.yml")}
 	}
 	if workingDir == "" {
 		return fmt.Errorf("current Docker Manager instance is not running from a compose working directory")
@@ -341,36 +338,11 @@ func applySelfUpdate(namespace string, repoPrefix string, targetVersion string) 
 	backendImage := fmt.Sprintf("%s/%s-backend:%s", namespace, repoPrefix, targetVersion)
 	frontendImage := fmt.Sprintf("%s/%s-frontend:%s", namespace, repoPrefix, targetVersion)
 
-	changedAny := false
-	for _, path := range resolvedFiles {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read compose file %s: %w", path, err)
-		}
-
-		updated, changed := rewriteComposeServiceImageRefs(string(raw), map[string]string{
-			"backend":  backendImage,
-			"frontend": frontendImage,
-		})
-		if !changed {
-			continue
-		}
-
-		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
-			return fmt.Errorf("write compose file %s: %w", path, err)
-		}
-		changedAny = true
-	}
-
-	if !changedAny {
-		return fmt.Errorf("could not find backend/frontend image definitions to update in compose files")
-	}
-
-	if err := runComposeHelper(workingDir, resolvedFiles, fmt.Sprintf(
-		"docker compose %s pull backend frontend && docker compose %s up -d backend frontend",
-		buildComposeFileArgs(resolvedFiles),
-		buildComposeFileArgs(resolvedFiles),
-	)); err != nil {
+	if err := runComposeHelper(
+		workingDir,
+		resolvedFiles,
+		buildSelfUpdateScript(resolvedFiles, backendImage, frontendImage),
+	); err != nil {
 		return err
 	}
 
@@ -438,64 +410,109 @@ func resolveUpdateComposeFilePath(workingDir string, composePath string) string 
 	return filepath.Clean(filepath.Join(workingDir, composePath))
 }
 
-func rewriteComposeServiceImageRefs(content string, replacements map[string]string) (string, bool) {
-	lines := strings.Split(content, "\n")
-	inServices := false
-	currentService := ""
-	changed := false
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-
-		indent := len(line) - len(strings.TrimLeft(line, " "))
-		if indent == 0 && trimmed == "services:" {
-			inServices = true
-			currentService = ""
-			continue
-		}
-
-		if inServices && indent == 0 {
-			inServices = false
-			currentService = ""
-		}
-		if !inServices {
-			continue
-		}
-
-		if indent == 2 && strings.HasSuffix(trimmed, ":") {
-			currentService = strings.TrimSuffix(trimmed, ":")
-			continue
-		}
-
-		targetImage, ok := replacements[currentService]
-		if !ok {
-			continue
-		}
-
-		if indent <= 2 {
-			currentService = ""
-			continue
-		}
-
-		if strings.HasPrefix(trimmed, "image:") {
-			prefix := line[:strings.Index(line, "image:")]
-			lines[i] = prefix + "image: " + targetImage
-			changed = true
-		}
-	}
-
-	return strings.Join(lines, "\n"), changed
-}
-
 func buildComposeFileArgs(configFiles []string) string {
 	parts := make([]string, 0, len(configFiles)*2)
 	for _, path := range configFiles {
 		parts = append(parts, "-f", shellQuote(path))
 	}
 	return strings.Join(parts, " ")
+}
+
+func buildSelfUpdateScript(configFiles []string, backendImage string, frontendImage string) string {
+	var script strings.Builder
+	script.WriteString("set -eu\n")
+	script.WriteString("changed=0\n")
+	script.WriteString(fmt.Sprintf("backend_image=%s\n", shellQuote(backendImage)))
+	script.WriteString(fmt.Sprintf("frontend_image=%s\n", shellQuote(frontendImage)))
+	script.WriteString("rewrite_file() {\n")
+	script.WriteString("  file=\"$1\"\n")
+	script.WriteString("  tmp=\"$file.tmp.$$\"\n")
+	script.WriteString("  awk -v backend_image=\"$backend_image\" -v frontend_image=\"$frontend_image\" '\n")
+	script.WriteString("    function flush_service() {\n")
+	script.WriteString("      if (!in_service) { return }\n")
+	script.WriteString("      if (!service_had_image && target_image != \"\") {\n")
+	script.WriteString("        print service_indent \"  image: \" target_image\n")
+	script.WriteString("        changed = 1\n")
+	script.WriteString("      }\n")
+	script.WriteString("      in_service = 0\n")
+	script.WriteString("      service_name = \"\"\n")
+	script.WriteString("      target_image = \"\"\n")
+	script.WriteString("      service_indent = \"\"\n")
+	script.WriteString("      service_had_image = 0\n")
+	script.WriteString("    }\n")
+	script.WriteString("    {\n")
+	script.WriteString("      raw = $0\n")
+	script.WriteString("      trimmed = raw\n")
+	script.WriteString("      sub(/^[[:space:]]+/, \"\", trimmed)\n")
+	script.WriteString("      indent_len = match(raw, /[^ ]/)\n")
+	script.WriteString("      if (indent_len == 0) {\n")
+	script.WriteString("        indent_len = length(raw)\n")
+	script.WriteString("      } else {\n")
+	script.WriteString("        indent_len -= 1\n")
+	script.WriteString("      }\n")
+	script.WriteString("      indent = substr(raw, 1, indent_len)\n")
+	script.WriteString("      if (trimmed == \"services:\") {\n")
+	script.WriteString("        flush_service()\n")
+	script.WriteString("        in_services = 1\n")
+	script.WriteString("        print raw\n")
+	script.WriteString("        next\n")
+	script.WriteString("      }\n")
+	script.WriteString("      if (in_services && indent_len == 0 && trimmed != \"\") {\n")
+	script.WriteString("        flush_service()\n")
+	script.WriteString("        in_services = 0\n")
+	script.WriteString("      }\n")
+	script.WriteString("      if (in_services && indent_len == 2 && trimmed ~ /:$/ && trimmed !~ /^-/) {\n")
+	script.WriteString("        flush_service()\n")
+	script.WriteString("        service_name = trimmed\n")
+	script.WriteString("        sub(/:$/, \"\", service_name)\n")
+	script.WriteString("        in_service = 1\n")
+	script.WriteString("        service_indent = indent\n")
+	script.WriteString("        if (service_name == \"backend\") target_image = backend_image\n")
+	script.WriteString("        else if (service_name == \"frontend\") target_image = frontend_image\n")
+	script.WriteString("        else target_image = \"\"\n")
+	script.WriteString("        service_had_image = 0\n")
+	script.WriteString("        print raw\n")
+	script.WriteString("        next\n")
+	script.WriteString("      }\n")
+	script.WriteString("      if (in_service && target_image != \"\" && indent_len > 2 && trimmed ~ /^image:[[:space:]]*/) {\n")
+	script.WriteString("        print indent \"image: \" target_image\n")
+	script.WriteString("        service_had_image = 1\n")
+	script.WriteString("        changed = 1\n")
+	script.WriteString("        next\n")
+	script.WriteString("      }\n")
+	script.WriteString("      print raw\n")
+	script.WriteString("    }\n")
+	script.WriteString("    END {\n")
+	script.WriteString("      flush_service()\n")
+	script.WriteString("      if (changed == 0) {\n")
+	script.WriteString("        exit 3\n")
+	script.WriteString("      }\n")
+	script.WriteString("    }\n")
+	script.WriteString("  ' \"$file\" > \"$tmp\" && mv \"$tmp\" \"$file\"\n")
+	script.WriteString("}\n")
+	script.WriteString("for file in")
+	for _, path := range configFiles {
+		script.WriteString(" ")
+		script.WriteString(shellQuote(path))
+	}
+	script.WriteString("; do\n")
+	script.WriteString("  if rewrite_file \"$file\"; then\n")
+	script.WriteString("    changed=1\n")
+	script.WriteString("  else\n")
+	script.WriteString("    status=$?\n")
+	script.WriteString("    rm -f \"$file.tmp.$$\"\n")
+	script.WriteString("    if [ \"$status\" -ne 3 ]; then\n")
+	script.WriteString("      exit \"$status\"\n")
+	script.WriteString("    fi\n")
+	script.WriteString("  fi\n")
+	script.WriteString("done\n")
+	script.WriteString("if [ \"$changed\" -eq 0 ]; then\n")
+	script.WriteString("  echo \"could not find backend/frontend image definitions to update in compose files\" >&2\n")
+	script.WriteString("  exit 4\n")
+	script.WriteString("fi\n")
+	script.WriteString(fmt.Sprintf("docker compose %s pull backend frontend\n", buildComposeFileArgs(configFiles)))
+	script.WriteString(fmt.Sprintf("docker compose %s up -d backend frontend\n", buildComposeFileArgs(configFiles)))
+	return script.String()
 }
 
 func shellQuote(value string) string {

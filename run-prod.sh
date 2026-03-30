@@ -66,11 +66,13 @@ normalize_service() {
 compose_build() {
   local svc
   svc="$(normalize_service "${1:-all}")"
+  local app_version="${2:-prod-build}"
+  local build_date="${3:-$(date -u +%F)}"
 
   if [[ "$svc" == "all" ]]; then
-    docker compose -f "$PROD_COMPOSE_FILE" build backend frontend
+    APP_VERSION="$app_version" BUILD_DATE="$build_date" docker compose -f "$PROD_COMPOSE_FILE" build backend frontend
   else
-    docker compose -f "$PROD_COMPOSE_FILE" build "$svc"
+    APP_VERSION="$app_version" BUILD_DATE="$build_date" docker compose -f "$PROD_COMPOSE_FILE" build "$svc"
   fi
 }
 
@@ -104,7 +106,7 @@ push_images() {
   local tag="${4:-latest}"
 
   echo "==> Building prod images từ docker-compose.prod.yml"
-  compose_build "$svc"
+  compose_build "$svc" "$tag" "$(date -u +%F)"
 
   if [[ "$svc" == "all" ]]; then
     tag_and_push backend "$user" "$repo_prefix" "$tag"
@@ -132,9 +134,9 @@ main() {
       local svc
       svc="$(normalize_service "${1:-all}")"
       if [[ "$svc" == "all" ]]; then
-        docker compose -f "$PROD_COMPOSE_FILE" up --build -d
+        APP_VERSION="${APP_VERSION:-prod-build}" BUILD_DATE="${BUILD_DATE:-$(date -u +%F)}" docker compose -f "$PROD_COMPOSE_FILE" up --build -d
       else
-        docker compose -f "$PROD_COMPOSE_FILE" up --build -d "$svc"
+        APP_VERSION="${APP_VERSION:-prod-build}" BUILD_DATE="${BUILD_DATE:-$(date -u +%F)}" docker compose -f "$PROD_COMPOSE_FILE" up --build -d "$svc"
       fi
       ;;
     down)
@@ -167,7 +169,7 @@ main() {
     build)
       require_compose_file
       require_docker
-      compose_build "${1:-all}"
+      compose_build "${1:-all}" "${APP_VERSION:-prod-build}" "${BUILD_DATE:-$(date -u +%F)}"
       ;;
     push)
       require_compose_file

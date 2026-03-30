@@ -3,6 +3,11 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+ARG APP_VERSION=2.1
+ARG BUILD_DATE=2026-03-30
+ENV VITE_APP_VERSION=${APP_VERSION}
+ENV VITE_BUILD_DATE=${BUILD_DATE}
+
 COPY frontend/package.json frontend/yarn.lock ./
 RUN yarn install --non-interactive
 

@@ -384,8 +384,8 @@ resolve_latest_tag() {
     if command -v curl >/dev/null 2>&1; then
         latest_tag=$(
             curl -fsSL "$api_url" 2>/dev/null \
-                | tr ',' '\n' \
-                | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' \
+                | grep -oE '"name"[[:space:]]*:[[:space:]]*"[^"]+"' \
+                | sed -E 's/"name"[[:space:]]*:[[:space:]]*"([^"]+)"/\1/' \
                 | grep -E '^v?[0-9]+(\.[0-9]+){0,3}([-.+][0-9A-Za-z.-]+)?$' \
                 | sort -rV \
                 | head -n 1

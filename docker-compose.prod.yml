@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.prod
+      args:
+        APP_VERSION: ${APP_VERSION:-prod-build}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
       - DOCKER_UI_DB_PATH=/data/app.db
@@ -22,6 +25,9 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile.prod
+      args:
+        APP_VERSION: ${APP_VERSION:-prod-build}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     ports:
       - "80:80"
     depends_on:

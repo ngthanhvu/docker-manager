@@ -1,6 +1,8 @@
 import { reactive, watch } from 'vue';
 
 const SETTINGS_KEY = 'docker-manager-settings-v1';
+const BUILD_APP_VERSION = String(import.meta.env.VITE_APP_VERSION || '2.1').trim();
+const BUILD_DATE = String(import.meta.env.VITE_BUILD_DATE || '2026-03-30').trim();
 
 export type AppSettings = {
     general: {
@@ -74,8 +76,8 @@ const defaults: AppSettings = {
         protectedResources: '',
     },
     about: {
-        appVersion: '2.1',
-        buildDate: '2026-03-30',
+        appVersion: BUILD_APP_VERSION,
+        buildDate: BUILD_DATE,
     },
     updates: {
         autoCheck: true,
@@ -127,7 +129,7 @@ const loadSettings = (): AppSettings => {
             runtime: { ...defaults.runtime, ...(parsed.runtime || {}) },
             notifications: { ...defaults.notifications, ...(parsed.notifications || {}) },
             safety: { ...defaults.safety, ...(parsed.safety || {}) },
-            about: { ...defaults.about, ...(parsed.about || {}) },
+            about: { ...defaults.about },
             updates: { ...defaults.updates, ...(parsed.updates || {}) },
         });
     } catch {
@@ -152,7 +154,10 @@ export const initSettings = () => {
 watch(
     appSettings,
     (next) => {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+            ...next,
+            about: { ...defaults.about },
+        }));
         applySettings(next);
     },
     { deep: true }
