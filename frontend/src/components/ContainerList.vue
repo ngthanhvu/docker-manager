@@ -20,7 +20,8 @@ import {
     Maximize2,
     Minimize2,
     List,
-    LayoutGrid
+    LayoutGrid,
+    Ellipsis
 } from 'lucide-vue-next';
 import { dockerApi, getWsUrl } from '../api';
 import { feedback } from '../ui/feedback';
@@ -49,6 +50,10 @@ const pageSizeOptions = [10, 20, 50];
 const selectedIds = ref<string[]>([]);
 const pruning = ref(false);
 const searchInput = ref<HTMLInputElement | null>(null);
+const containerStats = ref<Record<string, any>>({});
+const activeCardMenuId = ref<string | null>(null);
+const sortKey = ref<'name' | 'image' | 'status' | 'ports' | 'created'>('created');
+const sortDirection = ref<'asc' | 'desc'>('desc');
 
 const showLogsModal = ref(false);
 const logsOutput = ref('');
@@ -210,11 +215,33 @@ const filteredContainers = computed(() => {
     });
 });
 
-const totalItems = computed(() => filteredContainers.value.length);
+const compareValues = (left: string | number, right: string | number) => {
+    if (typeof left === 'number' && typeof right === 'number') return left - right;
+    return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+};
+
+const getContainerSortValue = (container: any) => {
+    if (sortKey.value === 'name') return getContainerName(container);
+    if (sortKey.value === 'image') return container.Image || '';
+    if (sortKey.value === 'status') return getContainerStateLabel(container);
+    if (sortKey.value === 'ports') return Array.isArray(container.Ports) ? container.Ports.length : 0;
+    return Number(container.Created || 0);
+};
+
+const sortedFilteredContainers = computed(() => {
+    const list = [...filteredContainers.value];
+    list.sort((a, b) => {
+        const result = compareValues(getContainerSortValue(a), getContainerSortValue(b));
+        return sortDirection.value === 'asc' ? result : -result;
+    });
+    return list;
+});
+
+const totalItems = computed(() => sortedFilteredContainers.value.length);
 const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)));
 const paginatedContainers = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
-    return filteredContainers.value.slice(start, start + pageSize.value);
+    return sortedFilteredContainers.value.slice(start, start + pageSize.value);
 });
 const pageStart = computed(() => (totalItems.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1));
 const pageEnd = computed(() => Math.min(currentPage.value * pageSize.value, totalItems.value));
@@ -223,6 +250,107 @@ const pageContainerIds = computed(() => paginatedContainers.value.map((c) => c.I
 const selectedCount = computed(() => selectedIds.value.length);
 const allPageSelected = computed(() => pageContainerIds.value.length > 0 && pageContainerIds.value.every((id) => selectedIds.value.includes(id)));
 const getContainerName = (container: any) => container?.Names?.[0]?.replace('/', '') || container?.Id?.substring(0, 12) || '';
+const getContainerStateLabel = (container: any) => {
+    const rawState = String(container?.State || '').trim();
+    if (rawState) return rawState.charAt(0).toUpperCase() + rawState.slice(1);
+    if (String(container?.Status || '').includes('Up')) return 'Running';
+    if (String(container?.Status || '').includes('Exited')) return 'Exited';
+    return String(container?.Status || 'Unknown');
+};
+
+const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex += 1;
+    }
+    return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+const fetchContainerStats = async () => {
+    const runningIds = paginatedContainers.value
+        .filter((container) => container.Status?.includes('Up'))
+        .map((container) => container.Id);
+
+    if (runningIds.length === 0) {
+        containerStats.value = {};
+        return;
+    }
+
+    try {
+        const { data } = await dockerApi.getContainerStats(runningIds);
+        containerStats.value = data && typeof data === 'object' ? data : {};
+    } catch (err) {
+        console.error('Failed to fetch container stats:', err);
+        containerStats.value = {};
+    }
+};
+
+const getContainerStats = (id: string) => containerStats.value[id];
+const getContainerMemoryLabel = (id: string) => {
+    const stats = getContainerStats(id);
+    if (!stats) return '--';
+    if (stats.memoryLimitBytes > 0) {
+        return `${formatBytes(stats.memoryUsedBytes)} / ${formatBytes(stats.memoryLimitBytes)}`;
+    }
+    return formatBytes(stats.memoryUsedBytes);
+};
+
+const getContainerNetworkLabel = (id: string) => {
+    const stats = getContainerStats(id);
+    if (!stats) return '--';
+    return `${t('containersView.rx')}: ${formatBytes(stats.networkRxBytes)} · ${t('containersView.tx')}: ${formatBytes(stats.networkTxBytes)}`;
+};
+
+const getContainerCpuPercent = (id: string) => {
+    const stats = getContainerStats(id);
+    if (!stats) return 0;
+    return Math.max(0, Math.min(100, Number(stats.cpuPercent || 0)));
+};
+
+const getContainerMemoryPercent = (id: string) => {
+    const stats = getContainerStats(id);
+    if (!stats) return 0;
+    return Math.max(0, Math.min(100, Number(stats.memoryPercent || 0)));
+};
+
+const toggleCardMenu = (id: string) => {
+    activeCardMenuId.value = activeCardMenuId.value === id ? null : id;
+};
+
+const closeCardMenu = () => {
+    activeCardMenuId.value = null;
+};
+
+const handleCardAction = async (action: string, container: any) => {
+    closeCardMenu();
+    if (action === 'logs') {
+        openLogs(container);
+        return;
+    }
+    if (action === 'terminal') {
+        openTerminal(container);
+        return;
+    }
+    await handleAction(action, container.Id);
+};
+
+const toggleSort = (key: 'name' | 'image' | 'status' | 'ports' | 'created') => {
+    if (sortKey.value === key) {
+        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+        return;
+    }
+    sortKey.value = key;
+    sortDirection.value = key === 'created' ? 'desc' : 'asc';
+};
+
+const getSortIndicator = (key: 'name' | 'image' | 'status' | 'ports' | 'created') => {
+    if (sortKey.value !== key) return '↕';
+    return sortDirection.value === 'asc' ? '↑' : '↓';
+};
 
 const toggleSelect = (id: string) => {
     if (selectedIds.value.includes(id)) {
@@ -618,6 +746,12 @@ const handleListShortcut = (event: KeyboardEvent) => {
     searchInput.value?.select();
 };
 
+const handleDocumentClick = (event: MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.card-actions-menu')) return;
+    closeCardMenu();
+};
+
 const setupInterval = () => {
     if (interval) clearInterval(interval);
     const ms = appSettings.general.autoRefreshMs;
@@ -631,6 +765,7 @@ onMounted(() => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     window.addEventListener('keydown', handleListShortcut);
+    document.addEventListener('click', handleDocumentClick);
 });
 
 onUnmounted(() => {
@@ -638,6 +773,7 @@ onUnmounted(() => {
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     document.removeEventListener('fullscreenchange', handleFullscreenChange);
     window.removeEventListener('keydown', handleListShortcut);
+    document.removeEventListener('click', handleDocumentClick);
     closeLogs();
     closeTerminal();
     document.body.style.overflow = '';
@@ -665,6 +801,10 @@ watch(filteredContainers, (list) => {
     const valid = new Set(list.map((c) => c.Id));
     selectedIds.value = selectedIds.value.filter((id) => valid.has(id));
 });
+
+watch(pageContainerIds, () => {
+    fetchContainerStats();
+}, { immediate: true });
 
 watch(() => appSettings.general.autoRefreshMs, () => {
     setupInterval();
@@ -744,11 +884,11 @@ watch(
                             <input class="bulk-checkbox" type="checkbox" :checked="allPageSelected"
                                 @change="toggleSelectAllPage" />
                         </th>
-                        <th>{{ t('containersView.name') }}</th>
-                        <th>{{ t('containersView.image') }}</th>
-                        <th>{{ t('containersView.status') }}</th>
-                        <th>{{ t('containersView.ports') }}</th>
-                        <th>{{ t('containersView.created') }}</th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('name')">{{ t('containersView.name') }}<span class="sort-indicator">{{ getSortIndicator('name') }}</span></button></th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('image')">{{ t('containersView.image') }}<span class="sort-indicator">{{ getSortIndicator('image') }}</span></button></th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('status')">{{ t('containersView.status') }}<span class="sort-indicator">{{ getSortIndicator('status') }}</span></button></th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('ports')">{{ t('containersView.ports') }}<span class="sort-indicator">{{ getSortIndicator('ports') }}</span></button></th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('created')">{{ t('containersView.created') }}<span class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
                         <th class="actions-cell">{{ t('common.actions') }}</th>
                     </tr>
                 </thead>
@@ -831,63 +971,89 @@ watch(
                             <input class="bulk-checkbox" type="checkbox" :checked="selectedIds.includes(container.Id)"
                                 @change="toggleSelect(container.Id)" />
                         </label>
-                        <div class="container-name">
-                            {{ container.Names[0].replace('/', '') }}
-                            <span class="id-short">{{ container.Id.substring(0, 12) }}</span>
-                        </div>
-                        <div class="status-pill" :style="{ '--color': getStatusColor(container.Status) }">
-                            <span class="dot"></span>
-                            {{ container.Status }}
+                        <div class="card-title-area">
+                            <div class="card-title-row">
+                                <div class="container-name">
+                                    {{ container.Names[0].replace('/', '') }}
+                                    <span class="id-short">{{ container.Id.substring(0, 12) }}</span>
+                                </div>
+                                <div class="status-pill" :style="{ '--color': getStatusColor(container.Status) }">
+                                    <span class="dot"></span>
+                                    {{ getContainerStateLabel(container) }}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <div class="card-meta-list">
                         <div class="card-meta-item">
-                            <span class="card-meta-label">{{ t('containersView.image') }}</span>
-                            <code class="image-name" :title="container.Image">{{ container.Image }}</code>
-                        </div>
-                        <div class="card-meta-item">
-                            <span class="card-meta-label">{{ t('containersView.created') }}</span>
-                            <span class="card-meta-value">{{ dayjs.unix(container.Created).fromNow() }}</span>
-                        </div>
-                        <div class="card-meta-item">
-                            <span class="card-meta-label">{{ t('containersView.ports') }}</span>
-                            <div v-if="container.Ports.length > 0" class="ports ports-wrap">
-                                <span v-for="port in container.Ports" :key="`${container.Id}-${getPortKey(port)}`"
-                                    class="port-tag">
-                                    {{ getPortLabel(port) }}
-                                </span>
+                            <span class="card-meta-label">{{ t('containersView.resources') }}</span>
+                            <div v-if="container.Status.includes('Up') && getContainerStats(container.Id)" class="resource-meters">
+                                <div class="resource-meter">
+                                    <div class="resource-meter-head">
+                                        <span>{{ t('nav.cpu') }}</span>
+                                        <strong>{{ getContainerCpuPercent(container.Id).toFixed(1) }}%</strong>
+                                    </div>
+                                    <div class="resource-progress">
+                                        <div class="resource-progress-fill cpu-fill"
+                                            :style="{ width: `${getContainerCpuPercent(container.Id)}%` }"></div>
+                                    </div>
+                                </div>
+                                <div class="resource-meter">
+                                    <div class="resource-meter-head">
+                                        <span>{{ t('nav.memory') }}</span>
+                                        <strong>{{ getContainerMemoryLabel(container.Id) }}</strong>
+                                    </div>
+                                    <div class="resource-progress">
+                                        <div class="resource-progress-fill memory-fill"
+                                            :style="{ width: `${getContainerMemoryPercent(container.Id)}%` }"></div>
+                                    </div>
+                                </div>
+                                <div class="resource-network-line">
+                                    {{ getContainerNetworkLabel(container.Id) }}
+                                </div>
                             </div>
-                            <span v-else class="card-meta-value muted">-</span>
+                            <span v-else class="card-meta-value muted">{{ t('containersView.noStats') }}</span>
                         </div>
                     </div>
 
-                    <div class="action-group card-action-group">
-                        <button v-if="!container.Status.includes('Up')" class="action-btn action-start"
-                            :title="t('compose.start')" @click="handleAction('start', container.Id)">
-                            <Play :size="16" />
+                    <div class="card-actions-menu">
+                        <button class="action-btn action-neutral card-menu-trigger" type="button"
+                            :title="t('common.actions')" @click.stop="toggleCardMenu(container.Id)">
+                            <Ellipsis :size="16" />
                         </button>
-                        <button v-else class="action-btn action-stop" :title="t('compose.stop')"
-                            @click="handleAction('stop', container.Id)">
-                            <Square :size="16" />
-                        </button>
-                        <button class="action-btn action-neutral" :disabled="!container.Status.includes('Up')"
-                            :title="t('compose.restart')" @click="handleAction('restart', container.Id)">
-                            <RotateCw :size="16" />
-                        </button>
-                        <button class="action-btn action-neutral" :title="t('compose.logs')"
-                            @click="openLogs(container)">
-                            <FileText :size="16" />
-                        </button>
-                        <button class="action-btn action-neutral"
-                            :title="t('containersView.terminalTitle', { name: getContainerName(container) })"
-                            @click="openTerminal(container)">
-                            <TerminalIcon :size="16" />
-                        </button>
-                        <button class="action-btn action-danger" :title="t('common.remove')"
-                            @click="handleAction('remove', container.Id)">
-                            <Trash2 :size="16" />
-                        </button>
+                        <div v-if="activeCardMenuId === container.Id" class="card-actions-popover glass-panel" @click.stop>
+                            <button v-if="!container.Status.includes('Up')" class="card-action-item action-start" type="button"
+                                @click="handleCardAction('start', container)">
+                                <Play :size="16" />
+                                {{ t('compose.start') }}
+                            </button>
+                            <button v-else class="card-action-item action-stop" type="button"
+                                @click="handleCardAction('stop', container)">
+                                <Square :size="16" />
+                                {{ t('compose.stop') }}
+                            </button>
+                            <button class="card-action-item action-neutral" type="button" :disabled="!container.Status.includes('Up')"
+                                @click="handleCardAction('restart', container)">
+                                <RotateCw :size="16" />
+                                {{ t('compose.restart') }}
+                            </button>
+                            <button class="card-action-item action-neutral" type="button"
+                                @click="handleCardAction('logs', container)">
+                                <FileText :size="16" />
+                                {{ t('compose.logs') }}
+                            </button>
+                            <button class="card-action-item action-neutral" type="button"
+                                @click="handleCardAction('terminal', container)">
+                                <TerminalIcon :size="16" />
+                                {{ t('containersView.terminalAction') }}
+                            </button>
+                            <button class="card-action-item action-danger" type="button"
+                                @click="handleCardAction('remove', container)">
+                                <Trash2 :size="16" />
+                                {{ t('common.remove') }}
+                            </button>
+                        </div>
                     </div>
                 </article>
             </div>
@@ -1124,6 +1290,7 @@ watch(
 }
 
 .container-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: 18px;
@@ -1132,8 +1299,20 @@ watch(
 
 .container-card-header {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: flex-start;
+    gap: 12px;
+    padding-right: 52px;
+}
+
+.card-title-area {
+    min-width: 0;
+}
+
+.card-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 12px;
 }
 
@@ -1186,6 +1365,23 @@ watch(
     font-weight: 600;
     color: var(--text-muted);
     border-bottom: 1px solid var(--glass-border);
+}
+
+.sort-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.sort-indicator {
+    font-size: 0.8em;
+    color: var(--text-muted);
 }
 
 .docker-table td {
@@ -1322,9 +1518,106 @@ watch(
     justify-content: flex-end;
 }
 
-.card-action-group {
-    justify-content: flex-start;
-    flex-wrap: wrap;
+.card-actions-menu {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+}
+
+.card-menu-trigger {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.card-actions-popover {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 180px;
+    padding: 8px;
+    z-index: 5;
+}
+
+.card-action-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 36px;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-main);
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.card-action-item:hover {
+    transform: translateY(-1px);
+}
+
+.card-action-item:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.resource-meters {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.resource-meter {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.resource-meter-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.resource-meter-head strong {
+    color: var(--text-main);
+    font-weight: 600;
+    text-align: right;
+}
+
+.resource-progress {
+    width: 100%;
+    height: 9px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.resource-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    transition: width 0.2s ease;
+}
+
+.cpu-fill {
+    background: linear-gradient(90deg, #38bdf8, #2563eb);
+}
+
+.memory-fill {
+    background: linear-gradient(90deg, #fbbf24, #f97316);
+}
+
+.resource-network-line {
+    font-size: 0.8rem;
+    color: var(--text-muted);
 }
 
 .action-btn {
@@ -1712,12 +2005,11 @@ watch(
         grid-template-columns: 1fr;
     }
 
-    .container-card-header {
-        grid-template-columns: auto minmax(0, 1fr);
+    .card-title-row {
+        flex-direction: column;
     }
 
     .container-card-header .status-pill {
-        grid-column: 1 / -1;
         justify-self: flex-start;
     }
 

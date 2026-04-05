@@ -56,6 +56,7 @@ export const dockerApi = {
   restartContainer: (id: string) => api.post(`/containers/${id}/restart`),
   removeContainer: (id: string) => api.delete(`/containers/${id}/remove`),
   inspectContainer: (id: string) => api.get(`/containers/${id}/inspect`),
+  getContainerStats: (ids: string[]) => api.post('/containers/stats', { ids }),
   pruneContainers: () => api.post('/containers/prune'),
 
   // Images

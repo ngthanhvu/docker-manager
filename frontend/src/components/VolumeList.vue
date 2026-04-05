@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
-import { HardDrive, Trash2, RefreshCw, BrushCleaning, List, LayoutGrid } from 'lucide-vue-next';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { HardDrive, Trash2, RefreshCw, BrushCleaning, List, LayoutGrid, Ellipsis } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import { dockerApi } from '../api';
 import { feedback } from '../ui/feedback';
@@ -20,6 +20,9 @@ const selectedNames = ref<string[]>([]);
 const deletingName = ref<string | null>(null);
 const bulkDeleting = ref(false);
 const pruning = ref(false);
+const activeCardMenuId = ref<string | null>(null);
+const sortKey = ref<'name' | 'driver' | 'mountpoint' | 'created'>('name');
+const sortDirection = ref<'asc' | 'desc'>('asc');
 const { t } = useI18n();
 
 const getErrorMessage = (err: unknown) => {
@@ -141,11 +144,32 @@ const pruneVolumes = async () => {
     }
 };
 
-const totalItems = computed(() => volumes.value.length);
+const compareValues = (left: string | number, right: string | number) => {
+    if (typeof left === 'number' && typeof right === 'number') return left - right;
+    return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
+};
+
+const getVolumeSortValue = (volume: any) => {
+    if (sortKey.value === 'name') return volume.Name || '';
+    if (sortKey.value === 'driver') return volume.Driver || '';
+    if (sortKey.value === 'mountpoint') return volume.Mountpoint || '';
+    return volume.CreatedAt ? dayjs(volume.CreatedAt).valueOf() : 0;
+};
+
+const sortedVolumes = computed(() => {
+    const list = [...volumes.value];
+    list.sort((a, b) => {
+        const result = compareValues(getVolumeSortValue(a), getVolumeSortValue(b));
+        return sortDirection.value === 'asc' ? result : -result;
+    });
+    return list;
+});
+
+const totalItems = computed(() => sortedVolumes.value.length);
 const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)));
 const paginatedVolumes = computed(() => {
     const start = (currentPage.value - 1) * pageSize.value;
-    return volumes.value.slice(start, start + pageSize.value);
+    return sortedVolumes.value.slice(start, start + pageSize.value);
 });
 const pageStart = computed(() => (totalItems.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1));
 const pageEnd = computed(() => Math.min(currentPage.value * pageSize.value, totalItems.value));
@@ -164,6 +188,34 @@ const toggleSelectAllPage = () => {
     else selectedNames.value = Array.from(new Set([...selectedNames.value, ...pageVolumeNames.value]));
 };
 
+const toggleCardMenu = (id: string) => {
+    activeCardMenuId.value = activeCardMenuId.value === id ? null : id;
+};
+
+const closeCardMenu = () => {
+    activeCardMenuId.value = null;
+};
+
+const handleDocumentClick = (event: MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.card-actions-menu')) return;
+    closeCardMenu();
+};
+
+const toggleSort = (key: 'name' | 'driver' | 'mountpoint' | 'created') => {
+    if (sortKey.value === key) {
+        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+        return;
+    }
+    sortKey.value = key;
+    sortDirection.value = key === 'created' ? 'desc' : 'asc';
+};
+
+const getSortIndicator = (key: 'name' | 'driver' | 'mountpoint' | 'created') => {
+    if (sortKey.value !== key) return '↕';
+    return sortDirection.value === 'asc' ? '↑' : '↓';
+};
+
 watch(pageSize, () => {
     currentPage.value = 1;
     persistStoredValue(VOLUME_PAGE_SIZE_KEY, pageSize.value);
@@ -177,7 +229,14 @@ watch(volumes, (list) => {
     selectedNames.value = selectedNames.value.filter((n) => valid.has(n));
 });
 
-onMounted(fetchVolumes);
+onMounted(() => {
+    fetchVolumes();
+    document.addEventListener('click', handleDocumentClick);
+});
+
+onUnmounted(() => {
+    document.removeEventListener('click', handleDocumentClick);
+});
 </script>
 
 <template>
@@ -222,10 +281,10 @@ onMounted(fetchVolumes);
                 <thead>
                     <tr>
                         <th class="check-col"><input class="bulk-checkbox" type="checkbox" :checked="allPageSelected" :disabled="bulkDeleting || !!deletingName || pruning" @change="toggleSelectAllPage" /></th>
-                        <th>{{ t('volumesView.name') }}</th>
-                        <th>{{ t('volumesView.driver') }}</th>
-                        <th>{{ t('volumesView.mountpoint') }}</th>
-                        <th>{{ t('volumesView.created') }}</th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('name')">{{ t('volumesView.name') }}<span class="sort-indicator">{{ getSortIndicator('name') }}</span></button></th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('driver')">{{ t('volumesView.driver') }}<span class="sort-indicator">{{ getSortIndicator('driver') }}</span></button></th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('mountpoint')">{{ t('volumesView.mountpoint') }}<span class="sort-indicator">{{ getSortIndicator('mountpoint') }}</span></button></th>
+                        <th><button class="sort-header" type="button" @click="toggleSort('created')">{{ t('volumesView.created') }}<span class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
                         <th class="actions-cell">{{ t('common.actions') }}</th>
                     </tr>
                 </thead>
@@ -293,12 +352,19 @@ onMounted(fetchVolumes);
                             <span>{{ vol.CreatedAt ? dayjs(vol.CreatedAt).format('YYYY-MM-DD HH:mm') : t('common.notAvailable') }}</span>
                         </div>
                     </div>
-                    <div class="action-group card-action-group">
-                        <button class="action-btn action-danger" :disabled="bulkDeleting || !!deletingName || pruning"
-                            :title="t('common.remove')" @click="removeVolume(vol.Name)">
-                            <RefreshCw v-if="deletingName === vol.Name" :size="16" class="animate-spin" />
-                            <Trash2 v-else :size="16" />
+                    <div class="card-actions-menu">
+                        <button class="action-btn action-neutral card-menu-trigger" type="button"
+                            :title="t('common.actions')" @click.stop="toggleCardMenu(vol.Name)">
+                            <Ellipsis :size="16" />
                         </button>
+                        <div v-if="activeCardMenuId === vol.Name" class="card-actions-popover glass-panel" @click.stop>
+                            <button class="card-action-item action-danger" type="button"
+                                :disabled="bulkDeleting || !!deletingName || pruning" @click="removeVolume(vol.Name)">
+                                <RefreshCw v-if="deletingName === vol.Name" :size="16" class="animate-spin" />
+                                <Trash2 v-else :size="16" />
+                                {{ t('common.remove') }}
+                            </button>
+                        </div>
                     </div>
                 </article>
             </div>
@@ -335,7 +401,7 @@ onMounted(fetchVolumes);
 .table-container { overflow: hidden; }
 .card-container { min-width: 0; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
-.entity-card { display: flex; flex-direction: column; gap: 16px; padding: 18px; }
+.entity-card { position: relative; display: flex; flex-direction: column; gap: 16px; padding: 18px; }
 .entity-card-header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: flex-start; gap: 12px; }
 .card-check { display: inline-flex; align-items: center; justify-content: center; padding-top: 2px; }
 .card-title-block { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -345,6 +411,8 @@ onMounted(fetchVolumes);
 .docker-table { width: 100%; border-collapse: collapse; }
 .docker-table th { text-align: left; padding: 14px 20px; font-size: 0.86rem; color: var(--text-muted); border-bottom: 1px solid var(--glass-border); }
 .docker-table td { padding: 14px 20px; font-size: 0.88rem; border-bottom: 1px solid var(--glass-border); }
+.sort-header { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.sort-indicator { font-size: 0.8em; color: var(--text-muted); }
 .check-col { width: 56px; text-align: center !important; padding: 10px !important; }
 .bulk-checkbox { width: 22px; height: 22px; cursor: pointer; accent-color: var(--primary); border-radius: 6px; }
 .bulk-checkbox:hover { filter: brightness(1.08); }
@@ -393,7 +461,12 @@ onMounted(fetchVolumes);
 }
 .actions-cell { width: 100px; text-align: center; }
 .action-group { display: flex; align-items: center; justify-content: center; }
-.card-action-group { justify-content: flex-start; }
+.card-actions-menu { position: absolute; top: 18px; right: 18px; }
+.card-menu-trigger { background: rgba(255, 255, 255, 0.05); }
+.card-actions-popover { position: absolute; top: calc(100% + 8px); right: 0; display: flex; flex-direction: column; gap: 6px; min-width: 160px; padding: 8px; z-index: 5; }
+.card-action-item { display: inline-flex; align-items: center; gap: 10px; width: 100%; min-height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--glass-border); background: rgba(255, 255, 255, 0.03); color: var(--text-main); cursor: pointer; transition: all 0.18s ease; }
+.card-action-item:hover { transform: translateY(-1px); }
+.card-action-item:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 .action-btn {
     width: 34px;
     height: 34px;

@@ -29,6 +29,7 @@ func SetupRouter() *mux.Router {
 	api.HandleFunc("/containers/{id}/remove", RemoveContainerHandler).Methods("DELETE")
 	api.HandleFunc("/containers/{id}/inspect", InspectContainerHandler).Methods("GET")
 	api.HandleFunc("/containers/prune", PruneContainersHandler).Methods("POST")
+	api.HandleFunc("/containers/stats", ContainerStatsHandler).Methods("POST")
 
 	// Image routes
 	api.HandleFunc("/images", ListImagesHandler).Methods("GET")
@@ -139,6 +140,19 @@ func PruneContainersHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(report)
+}
+
+func ContainerStatsHandler(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		IDs []string `json:"ids"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	json.NewEncoder(w).Encode(docker.GetBulkContainerResourceStats(payload.IDs))
 }
 
 func ListImagesHandler(w http.ResponseWriter, r *http.Request) {
