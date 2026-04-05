@@ -18,7 +18,9 @@ import {
     Copy,
     ClipboardPaste,
     Maximize2,
-    Minimize2
+    Minimize2,
+    List,
+    LayoutGrid
 } from 'lucide-vue-next';
 import { dockerApi, getWsUrl } from '../api';
 import { feedback } from '../ui/feedback';
@@ -37,7 +39,9 @@ const containers = ref<any[]>([]);
 const loading = ref(true);
 const CONTAINER_SEARCH_KEY = 'dock-manager.containers.search';
 const CONTAINER_PAGE_SIZE_KEY = 'dock-manager.containers.page-size';
+const CONTAINER_VIEW_MODE_KEY = 'dock-manager.containers.view-mode';
 const searchQuery = ref(loadStoredString(CONTAINER_SEARCH_KEY, ''));
+const viewMode = ref<'list' | 'card'>(loadStoredString(CONTAINER_VIEW_MODE_KEY, 'list') === 'card' ? 'card' : 'list');
 const activeContainer = ref<any | null>(null);
 const currentPage = ref(1);
 const pageSize = ref(loadStoredNumber(CONTAINER_PAGE_SIZE_KEY, 10, 10, 50));
@@ -649,6 +653,10 @@ watch(pageSize, () => {
     persistStoredValue(CONTAINER_PAGE_SIZE_KEY, pageSize.value);
 });
 
+watch(viewMode, () => {
+    persistStoredValue(CONTAINER_VIEW_MODE_KEY, viewMode.value);
+});
+
 watch(totalPages, (maxPage) => {
     if (currentPage.value > maxPage) currentPage.value = maxPage;
 });
@@ -687,9 +695,22 @@ watch(
         <div class="toolbar glass-panel">
             <div class="search-box">
                 <Search :size="18" />
-                <input ref="searchInput" v-model="searchQuery" type="text" :placeholder="t('containersView.searchPlaceholder')" />
+                <input ref="searchInput" v-model="searchQuery" type="text"
+                    :placeholder="t('containersView.searchPlaceholder')" />
             </div>
             <div class="toolbar-actions">
+                <div class="view-toggle" role="group" :aria-label="t('containersView.viewMode')">
+                    <button class="view-toggle-btn" :class="{ 'is-active': viewMode === 'list' }" type="button"
+                        :title="t('containersView.listView')" @click="viewMode = 'list'">
+                        <List :size="16" />
+                        {{ t('containersView.listView') }}
+                    </button>
+                    <button class="view-toggle-btn" :class="{ 'is-active': viewMode === 'card' }" type="button"
+                        :title="t('containersView.cardView')" @click="viewMode = 'card'">
+                        <LayoutGrid :size="16" />
+                        {{ t('containersView.cardView') }}
+                    </button>
+                </div>
                 <button class="btn btn-ghost" :disabled="selectedCount === 0 || pruning" @click="bulkStart">
                     <Play :size="16" />
                     {{ t('compose.start') }}
@@ -715,7 +736,7 @@ watch(
             </div>
         </div>
 
-        <div class="table-container glass-panel">
+        <div v-if="viewMode === 'list'" class="table-container glass-panel">
             <table class="docker-table">
                 <thead>
                     <tr>
@@ -775,10 +796,12 @@ watch(
                                     :title="t('compose.restart')" @click="handleAction('restart', container.Id)">
                                     <RotateCw :size="16" />
                                 </button>
-                                <button class="action-btn action-neutral" :title="t('compose.logs')" @click="openLogs(container)">
+                                <button class="action-btn action-neutral" :title="t('compose.logs')"
+                                    @click="openLogs(container)">
                                     <FileText :size="16" />
                                 </button>
-                                <button class="action-btn action-neutral" :title="t('containersView.terminalTitle', { name: getContainerName(container) })"
+                                <button class="action-btn action-neutral"
+                                    :title="t('containersView.terminalTitle', { name: getContainerName(container) })"
                                     @click="openTerminal(container)">
                                     <TerminalIcon :size="16" />
                                 </button>
@@ -796,6 +819,80 @@ watch(
             </table>
         </div>
 
+        <div v-else class="card-container">
+            <div v-if="filteredContainers.length === 0 && !loading" class="glass-panel card-empty-state">
+                {{ t('containersView.noItems') }}
+            </div>
+
+            <div v-else class="container-card-grid">
+                <article v-for="container in paginatedContainers" :key="container.Id" class="glass-panel container-card">
+                    <div class="container-card-header">
+                        <label class="card-check">
+                            <input class="bulk-checkbox" type="checkbox" :checked="selectedIds.includes(container.Id)"
+                                @change="toggleSelect(container.Id)" />
+                        </label>
+                        <div class="container-name">
+                            {{ container.Names[0].replace('/', '') }}
+                            <span class="id-short">{{ container.Id.substring(0, 12) }}</span>
+                        </div>
+                        <div class="status-pill" :style="{ '--color': getStatusColor(container.Status) }">
+                            <span class="dot"></span>
+                            {{ container.Status }}
+                        </div>
+                    </div>
+
+                    <div class="card-meta-list">
+                        <div class="card-meta-item">
+                            <span class="card-meta-label">{{ t('containersView.image') }}</span>
+                            <code class="image-name" :title="container.Image">{{ container.Image }}</code>
+                        </div>
+                        <div class="card-meta-item">
+                            <span class="card-meta-label">{{ t('containersView.created') }}</span>
+                            <span class="card-meta-value">{{ dayjs.unix(container.Created).fromNow() }}</span>
+                        </div>
+                        <div class="card-meta-item">
+                            <span class="card-meta-label">{{ t('containersView.ports') }}</span>
+                            <div v-if="container.Ports.length > 0" class="ports ports-wrap">
+                                <span v-for="port in container.Ports" :key="`${container.Id}-${getPortKey(port)}`"
+                                    class="port-tag">
+                                    {{ getPortLabel(port) }}
+                                </span>
+                            </div>
+                            <span v-else class="card-meta-value muted">-</span>
+                        </div>
+                    </div>
+
+                    <div class="action-group card-action-group">
+                        <button v-if="!container.Status.includes('Up')" class="action-btn action-start"
+                            :title="t('compose.start')" @click="handleAction('start', container.Id)">
+                            <Play :size="16" />
+                        </button>
+                        <button v-else class="action-btn action-stop" :title="t('compose.stop')"
+                            @click="handleAction('stop', container.Id)">
+                            <Square :size="16" />
+                        </button>
+                        <button class="action-btn action-neutral" :disabled="!container.Status.includes('Up')"
+                            :title="t('compose.restart')" @click="handleAction('restart', container.Id)">
+                            <RotateCw :size="16" />
+                        </button>
+                        <button class="action-btn action-neutral" :title="t('compose.logs')"
+                            @click="openLogs(container)">
+                            <FileText :size="16" />
+                        </button>
+                        <button class="action-btn action-neutral"
+                            :title="t('containersView.terminalTitle', { name: getContainerName(container) })"
+                            @click="openTerminal(container)">
+                            <TerminalIcon :size="16" />
+                        </button>
+                        <button class="action-btn action-danger" :title="t('common.remove')"
+                            @click="handleAction('remove', container.Id)">
+                            <Trash2 :size="16" />
+                        </button>
+                    </div>
+                </article>
+            </div>
+        </div>
+
         <div v-if="filteredContainers.length > 0" class="pagination glass-panel">
             <div class="pager-meta">
                 <span>{{ t('common.rows') }}</span>
@@ -805,9 +902,11 @@ watch(
                 <span>{{ pageStart }}-{{ pageEnd }} / {{ totalItems }}</span>
             </div>
             <div class="pager-actions">
-                <button class="btn btn-ghost" :disabled="currentPage === 1" @click="currentPage--">{{ t('common.prev') }}</button>
+                <button class="btn btn-ghost" :disabled="currentPage === 1" @click="currentPage--">{{ t('common.prev')
+                    }}</button>
                 <span class="pager-page">{{ t('common.page') }} {{ currentPage }} / {{ totalPages }}</span>
-                <button class="btn btn-ghost" :disabled="currentPage >= totalPages" @click="currentPage++">{{ t('common.next') }}</button>
+                <button class="btn btn-ghost" :disabled="currentPage >= totalPages" @click="currentPage++">{{
+                    t('common.next') }}</button>
             </div>
         </div>
 
@@ -835,7 +934,9 @@ watch(
                                     <RefreshCw :size="10" />
                                 </button>
                             </div>
-                            <h3>{{ t('containersView.logsTitle', { name: activeContainer?.Names?.[0]?.replace('/', '') || '' }) }}</h3>
+                            <h3>{{ t('containersView.logsTitle', {
+                                name: activeContainer?.Names?.[0]?.replace('/', '')
+                                || '' }) }}</h3>
                         </div>
                         <div class="modal-actions">
                             <button class="btn btn-ghost btn-icon modal-tool-btn" type="button"
@@ -887,7 +988,9 @@ watch(
                                     <Maximize2 v-else :size="10" />
                                 </button>
                             </div>
-                            <h3>{{ t('containersView.terminalTitle', { name: activeContainer?.Names?.[0]?.replace('/', '') || '' }) }}</h3>
+                            <h3>{{ t('containersView.terminalTitle', {
+                                name: activeContainer?.Names?.[0]?.replace('/',
+                                '') || '' }) }}</h3>
                             <span class="terminal-shell-pill">{{ appSettings.runtime.terminalShell }}</span>
                         </div>
                         <div class="modal-actions">
@@ -945,6 +1048,41 @@ watch(
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass);
+}
+
+.view-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+
+.view-toggle-btn:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.view-toggle-btn.is-active {
+    background: color-mix(in srgb, var(--primary) 18%, var(--glass));
+    color: var(--primary);
 }
 
 .search-box {
@@ -973,6 +1111,65 @@ watch(
     overflow: auto;
     width: 100%;
     min-width: 0;
+}
+
+.card-container {
+    min-width: 0;
+}
+
+.container-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 18px;
+}
+
+.container-card {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 18px;
+}
+
+.container-card-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.card-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 2px;
+}
+
+.card-meta-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.card-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.card-meta-label {
+    font-size: 0.76rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.card-meta-value {
+    color: var(--text-main);
+}
+
+.muted {
+    color: var(--text-muted);
 }
 
 .docker-table {
@@ -1103,6 +1300,11 @@ watch(
     scrollbar-width: thin;
 }
 
+.ports-wrap {
+    flex-wrap: wrap;
+    overflow: visible;
+}
+
 .port-tag {
     background: var(--glass);
     color: var(--text-muted);
@@ -1118,6 +1320,11 @@ watch(
     gap: 6px;
     align-items: center;
     justify-content: flex-end;
+}
+
+.card-action-group {
+    justify-content: flex-start;
+    flex-wrap: wrap;
 }
 
 .action-btn {
@@ -1211,6 +1418,12 @@ watch(
 
 .empty-state {
     padding: 80px 0;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.card-empty-state {
+    padding: 80px 24px;
     text-align: center;
     color: var(--text-muted);
 }
@@ -1476,6 +1689,37 @@ watch(
 }
 
 @media (max-width: 900px) {
+    .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-box {
+        width: 100%;
+    }
+
+    .view-toggle {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .view-toggle-btn {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .container-card-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .container-card-header {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .container-card-header .status-pill {
+        grid-column: 1 / -1;
+        justify-self: flex-start;
+    }
 
     .terminal-modal-panel,
     .logs-modal-panel {

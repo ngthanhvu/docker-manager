@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import { Network, Trash2, RefreshCw, BrushCleaning } from 'lucide-vue-next';
+import { Network, Trash2, RefreshCw, BrushCleaning, List, LayoutGrid } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import { dockerApi } from '../api';
 import { feedback } from '../ui/feedback';
@@ -11,7 +11,9 @@ const networks = ref<any[]>([]);
 const loading = ref(true);
 const currentPage = ref(1);
 const NETWORK_PAGE_SIZE_KEY = 'dock-manager.networks.page-size';
+const NETWORK_VIEW_MODE_KEY = 'dock-manager.networks.view-mode';
 const pageSize = ref(loadStoredNumber(NETWORK_PAGE_SIZE_KEY, 10, 10, 50));
+const viewMode = ref<'list' | 'card'>(localStorage.getItem(NETWORK_VIEW_MODE_KEY) === 'card' ? 'card' : 'list');
 const pageSizeOptions = [10, 20, 50];
 const selectedIds = ref<string[]>([]);
 const pruning = ref(false);
@@ -121,6 +123,9 @@ watch(pageSize, () => {
     currentPage.value = 1;
     persistStoredValue(NETWORK_PAGE_SIZE_KEY, pageSize.value);
 });
+watch(viewMode, () => {
+    persistStoredValue(NETWORK_VIEW_MODE_KEY, viewMode.value);
+});
 watch(totalPages, (maxPage) => {
     if (currentPage.value > maxPage) currentPage.value = maxPage;
 });
@@ -140,6 +145,18 @@ onMounted(fetchNetworks);
                 <h2>{{ t('networksView.title') }}</h2>
             </div>
             <div class="toolbar-actions">
+                <div class="view-toggle" role="group" :aria-label="t('common.viewMode')">
+                    <button class="view-toggle-btn" :class="{ 'is-active': viewMode === 'list' }" type="button"
+                        :title="t('common.listView')" @click="viewMode = 'list'">
+                        <List :size="16" />
+                        {{ t('common.listView') }}
+                    </button>
+                    <button class="view-toggle-btn" :class="{ 'is-active': viewMode === 'card' }" type="button"
+                        :title="t('common.cardView')" @click="viewMode = 'card'">
+                        <LayoutGrid :size="16" />
+                        {{ t('common.cardView') }}
+                    </button>
+                </div>
                 <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0 || pruning" @click="bulkDelete">
                     <Trash2 :size="16" />
                     {{ t('common.delete') }} ({{ selectedCount }})
@@ -156,7 +173,7 @@ onMounted(fetchNetworks);
             </div>
         </div>
 
-        <div class="table-container glass-panel">
+        <div v-if="viewMode === 'list'" class="table-container glass-panel">
             <table class="docker-table">
                 <thead>
                     <tr>
@@ -192,6 +209,45 @@ onMounted(fetchNetworks);
             </table>
         </div>
 
+        <div v-else class="card-container">
+            <div v-if="networks.length === 0 && !loading" class="glass-panel card-empty-state">
+                {{ t('networksView.noItems') }}
+            </div>
+            <div v-else class="card-grid">
+                <article v-for="net in paginatedNetworks" :key="net.Id" class="glass-panel entity-card">
+                    <div class="entity-card-header">
+                        <label class="card-check">
+                            <input class="bulk-checkbox" type="checkbox" :checked="selectedIds.includes(net.Id)"
+                                @change="toggleSelect(net.Id)" />
+                        </label>
+                        <div class="card-title-block">
+                            <div class="name-cell">{{ net.Name }}</div>
+                            <code class="card-id">{{ net.Id.substring(0, 12) }}</code>
+                        </div>
+                    </div>
+                    <div class="card-meta-list">
+                        <div class="card-meta-item">
+                            <span class="card-meta-label">{{ t('networksView.driver') }}</span>
+                            <span>{{ net.Driver }}</span>
+                        </div>
+                        <div class="card-meta-item">
+                            <span class="card-meta-label">{{ t('networksView.scope') }}</span>
+                            <span>{{ net.Scope }}</span>
+                        </div>
+                        <div class="card-meta-item">
+                            <span class="card-meta-label">{{ t('networksView.internal') }}</span>
+                            <span>{{ net.Internal ? t('common.yes') : t('common.no') }}</span>
+                        </div>
+                    </div>
+                    <div class="action-group card-action-group">
+                        <button class="action-btn action-danger" :title="t('common.remove')" @click="removeNetwork(net.Id)">
+                            <Trash2 :size="16" />
+                        </button>
+                    </div>
+                </article>
+            </div>
+        </div>
+
         <div v-if="networks.length > 0" class="pagination glass-panel">
             <div class="pager-meta">
                 <span>{{ t('common.rows') }}</span>
@@ -211,12 +267,26 @@ onMounted(fetchNetworks);
 
 <style scoped>
 .network-list-view { display: flex; flex-direction: column; gap: 24px; }
-.toolbar { padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
-.toolbar-actions { display: flex; align-items: center; gap: 8px; }
+.toolbar { padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .title-with-icon { display: flex; align-items: center; gap: 12px; }
 .title-with-icon h2 { font-size: 1.2rem; margin: 0; }
 .icon-indigo { color: var(--primary); }
+.view-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px; border: 1px solid var(--glass-border); background: var(--glass); }
+.view-toggle-btn { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; border: none; border-radius: 9px; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.18s ease; }
+.view-toggle-btn:hover { color: var(--text-main); background: rgba(255, 255, 255, 0.04); }
+.view-toggle-btn.is-active { background: color-mix(in srgb, var(--primary) 18%, var(--glass)); color: var(--primary); }
 .table-container { overflow: hidden; }
+.card-container { min-width: 0; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
+.entity-card { display: flex; flex-direction: column; gap: 16px; padding: 18px; }
+.entity-card-header { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: flex-start; gap: 12px; }
+.card-check { display: inline-flex; align-items: center; justify-content: center; padding-top: 2px; }
+.card-title-block { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.card-id { color: var(--text-muted); }
+.card-meta-list { display: flex; flex-direction: column; gap: 12px; }
+.card-meta-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.card-meta-label { font-size: 0.76rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
 .docker-table { width: 100%; border-collapse: collapse; }
 .docker-table th { text-align: left; padding: 14px 20px; font-size: 0.86rem; color: var(--text-muted); border-bottom: 1px solid var(--glass-border); }
 .docker-table td { padding: 14px 20px; font-size: 0.88rem; border-bottom: 1px solid var(--glass-border); }
@@ -229,6 +299,7 @@ onMounted(fetchNetworks);
 .name-cell { font-weight: 600; }
 .actions-cell { width: 100px; text-align: center; }
 .action-group { display: flex; align-items: center; justify-content: center; }
+.card-action-group { justify-content: flex-start; }
 .action-btn {
     width: 34px;
     height: 34px;
@@ -261,10 +332,17 @@ onMounted(fetchNetworks);
     border-color: rgba(239, 68, 68, 0.55);
 }
 .empty-state { text-align: center; color: var(--text-muted); padding: 56px 0; }
+.card-empty-state { text-align: center; color: var(--text-muted); padding: 56px 24px; }
 .pagination { padding: 10px 14px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .pager-meta, .pager-actions { display: flex; align-items: center; gap: 8px; color: var(--text-muted); font-size: 0.82rem; }
 .pager-meta select { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text-main); border-radius: 6px; padding: 4px 6px; }
 .pager-page { min-width: 92px; text-align: center; }
 .animate-spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@media (max-width: 900px) {
+    .toolbar { flex-direction: column; align-items: stretch; }
+    .view-toggle { width: 100%; justify-content: space-between; }
+    .view-toggle-btn { flex: 1; justify-content: center; }
+    .card-grid { grid-template-columns: 1fr; }
+}
 </style>
