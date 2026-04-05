@@ -36,9 +36,7 @@ const maybePromptForAppUpdate = async () => {
   try {
     const result = await updates.apply();
     feedback.info(result.message || t('settings.updateStarted'));
-    window.setTimeout(() => {
-      window.location.reload();
-    }, 12000);
+    void updates.waitForAppReload();
   } catch {
     feedback.error(updates.state.message || t('common.actionFailed'));
   }

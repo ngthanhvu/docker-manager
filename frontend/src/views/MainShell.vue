@@ -142,9 +142,9 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 </script>
 
 <template>
-  <div class="flex min-h-screen min-h-dvh bg-transparent">
+  <div class="flex min-h-screen bg-transparent">
     <aside class="hidden w-[292px] shrink-0 p-4 lg:block">
-      <div class="glass-panel flex h-[calc(100vh-2rem)] h-[calc(100dvh-2rem)] flex-col overflow-hidden">
+      <div class="glass-panel flex h-[calc(100vh-2rem)] flex-col overflow-hidden">
         <div class="border-b px-6 py-6" style="border-color: var(--glass-border);">
           <div class="mb-2 flex items-center gap-3">
             <div class="grid h-12 w-12 place-items-center border text-2xl"
@@ -153,7 +153,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
             </div>
             <div>
               <p class="text-[11px] uppercase tracking-[0.24em]" style="color: var(--text-muted);">{{ t('nav.opsPanel')
-              }}</p>
+                }}</p>
               <div class="text-xl font-bold tracking-tight">Dock Manager</div>
             </div>
           </div>
@@ -195,14 +195,14 @@ watch(() => appSettings.general.autoRefreshMs, () => {
             </div>
           </div>
           <div class="font-mono text-xs uppercase tracking-[0.16em]" style="color: var(--text-muted);">
-            {{ t('nav.build') }} v{{ appSettings.about.appVersion }}
+            {{ t('nav.build') }} {{ appSettings.about.appVersion }}
           </div>
         </div>
       </div>
     </aside>
 
     <main class="min-w-0 flex-1 p-4 pl-4 lg:pl-0">
-      <div class="glass-panel flex h-[calc(100vh-2rem)] h-[calc(100dvh-2rem)] min-w-0 flex-col overflow-hidden">
+      <div class="glass-panel flex h-[calc(100dvh-2rem)] min-w-0 flex-col overflow-hidden">
         <header class="border-b px-5 py-5 sm:px-8"
           style="border-color: var(--glass-border); background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);">
           <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
@@ -211,7 +211,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 {{ activeTabMeta ? t(activeTabMeta.nameKey) : '' }}
               </p>
               <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">{{ activeTabMeta ? t(activeTabMeta.nameKey) : ''
-              }}</h1>
+                }}</h1>
               <p v-if="activeTab === 'dashboard'" class="mt-2 max-w-2xl text-sm leading-6"
                 style="color: var(--text-muted);">
                 {{ t('nav.dashboardSubtitle') }}

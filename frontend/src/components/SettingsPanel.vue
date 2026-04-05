@@ -41,7 +41,68 @@ const showUpdateConsole = ref(false);
 const updateConsoleOutput = ref('');
 const updateConsoleEl = ref<HTMLElement | null>(null);
 const updateConsoleFollow = ref(true);
+const waitingForReload = ref(false);
+const updateProgressFailed = ref(false);
 let updateConsoleSocket: WebSocket | null = null;
+
+const updateProgress = computed(() => {
+  const output = updateConsoleOutput.value.toLowerCase();
+  const has = (value: string) => output.includes(value);
+
+  const preparing = updateState.applying || has('[update] preparing version');
+  const located = has('locating current docker manager container') || has('compose working directory') || has('resolved docker tag');
+  const helperReady = has('pulling helper image') || has('helper image ready') || has('helper container created');
+  const deploying = has('helper container started') || has('docker compose pull/up completed') || has('update commands finished');
+  const succeeded = !updateState.applying && !!updateState.latestVersion && has('[done] update commands finished');
+  const failed = updateProgressFailed.value || output.includes('[error]');
+
+  const steps = [
+    {
+      key: 'prepare',
+      label: t('settings.updatePhasePrepare'),
+      state: failed ? (preparing ? 'error' : 'pending') : (located || helperReady || deploying || waitingForReload.value || succeeded ? 'done' : preparing ? 'active' : 'pending'),
+    },
+    {
+      key: 'helper',
+      label: t('settings.updatePhaseHelper'),
+      state: failed ? (helperReady ? 'error' : 'pending') : (deploying || waitingForReload.value || succeeded ? 'done' : helperReady ? 'active' : 'pending'),
+    },
+    {
+      key: 'deploy',
+      label: t('settings.updatePhaseDeploy'),
+      state: failed ? (deploying ? 'error' : 'pending') : (waitingForReload.value || succeeded ? 'done' : deploying ? 'active' : 'pending'),
+    },
+    {
+      key: 'reload',
+      label: t('settings.updatePhaseReload'),
+      state: failed ? 'pending' : (succeeded ? 'done' : waitingForReload.value ? 'active' : 'pending'),
+    },
+  ] as const;
+
+  let percent = 6;
+  if (preparing) percent = 18;
+  if (located) percent = 36;
+  if (helperReady) percent = 58;
+  if (deploying) percent = 82;
+  if (waitingForReload.value) percent = 94;
+  if (succeeded) percent = 100;
+  if (failed) percent = Math.max(percent, 12);
+
+  let title = t('settings.updateConsoleTitle');
+  let detail = updateState.message || t('settings.updateConsoleHelp');
+
+  if (failed) {
+    title = t('settings.updateFailed');
+  } else if (succeeded) {
+    title = t('settings.updateCompleted');
+    detail = t('settings.updateReloading');
+  } else if (waitingForReload.value) {
+    title = t('settings.updateReloading');
+    detail = t('settings.updateReconnectHelp');
+  }
+
+  return { percent, title, detail, failed, succeeded, steps };
+});
 
 const updateStatusTone = computed(() => {
   if (updateState.applying) {
@@ -134,9 +195,11 @@ const connectUpdateConsole = () => {
 
 const openUpdateConsole = () => {
   showUpdateConsole.value = true;
-  updateConsoleOutput.value = '';
-  updateConsoleFollow.value = true;
-  connectUpdateConsole();
+  if (!updateConsoleSocket) {
+    updateConsoleOutput.value = '';
+    updateConsoleFollow.value = true;
+    connectUpdateConsole();
+  }
 };
 
 const closeUpdateConsole = () => {
@@ -170,22 +233,47 @@ const applyUpdate = async () => {
   if (!accepted) return;
 
   openUpdateConsole();
+  updateProgressFailed.value = false;
+  waitingForReload.value = false;
   appendUpdateConsole(`[info] ${t('settings.updateConsoleStarting')}\n`);
 
   try {
     const result = await updates.apply();
     feedback.info(result.message || t('settings.updateStarted'));
+    waitingForReload.value = true;
+    void updates.waitForAppReload().then((reloaded) => {
+      if (!reloaded) {
+        waitingForReload.value = false;
+        updateProgressFailed.value = true;
+        appendUpdateConsole(`\n[warn] ${t('settings.updateReloadTimeout')}\n`);
+      }
+    });
   } catch (error) {
+    waitingForReload.value = false;
+    updateProgressFailed.value = true;
     appendUpdateConsole(`[error] ${error instanceof Error ? error.message : t('common.actionFailed')}\n`);
     feedback.error(error instanceof Error ? error.message : (updateState.message || t('common.actionFailed')));
   }
 };
 
 onMounted(() => {
-  void updates.syncStatus().catch(() => undefined);
-  if (appSettings.updates.autoCheck && !updateState.checkedAt && updateState.status === 'idle') {
-    void checkUpdates(true);
-  }
+  void updates.syncStatus()
+    .then((status) => {
+      if (status.inProgress) {
+        showUpdateConsole.value = true;
+        waitingForReload.value = true;
+        connectUpdateConsole();
+        void updates.waitForAppReload().then((reloaded) => {
+          if (!reloaded) {
+            waitingForReload.value = false;
+            updateProgressFailed.value = true;
+          }
+        });
+      } else if (appSettings.updates.autoCheck && !updateState.checkedAt && updateState.status === 'idle') {
+        void checkUpdates(true);
+      }
+    })
+    .catch(() => undefined);
 });
 
 onUnmounted(() => {
@@ -262,9 +350,12 @@ watch(showUpdateConsole, (open) => {
             <small class="mt-2 block text-xs" style="color: var(--text-muted);">{{ t('settings.autoRefreshHelp') }}</small>
           </label>
 
-          <label class="flex items-center justify-between border px-4 py-3" style="border-color: var(--glass-border); background: var(--glass);">
+          <label class="settings-switch-row">
             <span class="text-sm font-semibold">{{ t('settings.confirmDestructive') }}</span>
-            <input v-model="appSettings.general.confirmDestructive" type="checkbox" class="h-5 w-5 accent-blue-600" />
+            <span class="settings-switch">
+              <input v-model="appSettings.general.confirmDestructive" type="checkbox" class="settings-switch-input" />
+              <span class="settings-switch-track"></span>
+            </span>
           </label>
 
           <label class="block">
@@ -303,9 +394,12 @@ watch(showUpdateConsole, (open) => {
             </div>
           </label>
 
-          <label class="flex items-center justify-between border px-4 py-3 lg:col-span-2" style="border-color: var(--glass-border); background: var(--glass);">
+          <label class="settings-switch-row lg:col-span-2">
             <span class="text-sm font-semibold">{{ t('settings.showSidebarStats') }}</span>
-            <input v-model="appSettings.ui.showSidebarStats" type="checkbox" class="h-5 w-5 accent-blue-600" />
+            <span class="settings-switch">
+              <input v-model="appSettings.ui.showSidebarStats" type="checkbox" class="settings-switch-input" />
+              <span class="settings-switch-track"></span>
+            </span>
           </label>
         </div>
       </section>
@@ -369,9 +463,12 @@ watch(showUpdateConsole, (open) => {
         </div>
 
         <div class="grid gap-4 lg:grid-cols-2">
-          <label class="flex items-center justify-between border px-4 py-3 lg:col-span-2" style="border-color: var(--glass-border); background: var(--glass);">
+          <label class="settings-switch-row lg:col-span-2">
             <span class="text-sm font-semibold">{{ t('settings.autoCheckUpdates') }}</span>
-            <input v-model="appSettings.updates.autoCheck" type="checkbox" class="h-5 w-5 accent-blue-600" />
+            <span class="settings-switch">
+              <input v-model="appSettings.updates.autoCheck" type="checkbox" class="settings-switch-input" />
+              <span class="settings-switch-track"></span>
+            </span>
           </label>
 
           <label class="block">
@@ -449,14 +546,20 @@ watch(showUpdateConsole, (open) => {
             <input v-model.number="appSettings.notifications.toastDurationMs" type="number" min="1000" max="10000" step="100" class="app-input" />
           </label>
 
-          <label class="flex items-center justify-between border px-4 py-3" style="border-color: var(--glass-border); background: var(--glass);">
+          <label class="settings-switch-row">
             <span class="text-sm font-semibold">{{ t('settings.showSuccessToasts') }}</span>
-            <input v-model="appSettings.notifications.showSuccessToast" type="checkbox" class="h-5 w-5 accent-blue-600" />
+            <span class="settings-switch">
+              <input v-model="appSettings.notifications.showSuccessToast" type="checkbox" class="settings-switch-input" />
+              <span class="settings-switch-track"></span>
+            </span>
           </label>
 
-          <label class="flex items-center justify-between border px-4 py-3" style="border-color: var(--glass-border); background: var(--glass);">
+          <label class="settings-switch-row">
             <span class="text-sm font-semibold">{{ t('settings.showDetailedErrors') }}</span>
-            <input v-model="appSettings.notifications.showDetailedErrors" type="checkbox" class="h-5 w-5 accent-blue-600" />
+            <span class="settings-switch">
+              <input v-model="appSettings.notifications.showDetailedErrors" type="checkbox" class="settings-switch-input" />
+              <span class="settings-switch-track"></span>
+            </span>
           </label>
         </div>
       </section>
@@ -464,9 +567,12 @@ watch(showUpdateConsole, (open) => {
       <section class="glass-panel p-5">
         <p class="section-heading">{{ t('settings.safety') }}</p>
         <div class="grid gap-4">
-          <label class="flex items-center justify-between border px-4 py-3" style="border-color: var(--glass-border); background: var(--glass);">
+          <label class="settings-switch-row">
             <span class="text-sm font-semibold">{{ t('settings.requireDeleteTyping') }}</span>
-            <input v-model="appSettings.safety.softDeleteRequireTyping" type="checkbox" class="h-5 w-5 accent-blue-600" />
+            <span class="settings-switch">
+              <input v-model="appSettings.safety.softDeleteRequireTyping" type="checkbox" class="settings-switch-input" />
+              <span class="settings-switch-track"></span>
+            </span>
           </label>
 
           <label class="block">
@@ -499,26 +605,110 @@ watch(showUpdateConsole, (open) => {
     <div v-if="showUpdateConsole" class="update-console-backdrop" @click.self="closeUpdateConsole">
       <div class="update-console-panel">
         <div class="update-console-header">
-          <div>
+          <div class="update-progress-copy">
             <p class="section-heading mb-0">{{ t('settings.openUpdateConsole') }}</p>
-            <h3 class="update-console-title">{{ t('settings.updateConsoleTitle') }}</h3>
+            <h3 class="update-console-title">{{ updateProgress.title }}</h3>
+            <p class="update-progress-detail">{{ updateProgress.detail }}</p>
           </div>
-          <button class="btn btn-ghost" type="button" @click="closeUpdateConsole">
+          <button class="btn btn-ghost" type="button" :disabled="updateState.applying || waitingForReload" @click="closeUpdateConsole">
             {{ t('common.close') }}
           </button>
         </div>
 
-        <p class="update-console-help">
-          {{ t('settings.updateConsoleHelp') }}
-        </p>
+        <div class="update-progress-shell">
+          <div class="update-progress-head">
+            <span>{{ t('settings.updateProgressLabel') }}</span>
+            <strong>{{ updateProgress.percent }}%</strong>
+          </div>
+          <div class="update-progress-track">
+            <div class="update-progress-fill" :class="{ 'is-failed': updateProgress.failed }"
+              :style="{ width: `${updateProgress.percent}%` }"></div>
+          </div>
+          <div class="update-phase-list">
+            <div v-for="step in updateProgress.steps" :key="step.key" class="update-phase-item"
+              :class="[`is-${step.state}`]">
+              <span class="phase-dot"></span>
+              <span>{{ step.label }}</span>
+            </div>
+          </div>
+        </div>
 
-        <pre ref="updateConsoleEl" class="update-console-output" @scroll="handleUpdateConsoleScroll">{{ updateConsoleOutput }}</pre>
+        <div class="update-log-shell">
+          <div class="update-log-header">
+            <span>{{ t('settings.updateLogs') }}</span>
+          </div>
+          <pre ref="updateConsoleEl" class="update-console-output" @scroll="handleUpdateConsoleScroll">{{ updateConsoleOutput }}</pre>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.settings-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--glass-border);
+  padding: 12px 16px;
+  background: var(--glass);
+}
+
+.settings-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 52px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.settings-switch-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.settings-switch-track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.settings-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f8fafc;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.28);
+  transition: transform 0.18s ease;
+}
+
+.settings-switch-input:checked + .settings-switch-track {
+  background: color-mix(in srgb, var(--primary) 70%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 72%, transparent);
+}
+
+.settings-switch-input:checked + .settings-switch-track::after {
+  transform: translateX(22px);
+}
+
+.settings-switch-input:focus-visible + .settings-switch-track {
+  outline: 2px solid color-mix(in srgb, var(--primary) 55%, transparent);
+  outline-offset: 2px;
+}
+
 .update-console-backdrop {
   position: fixed;
   inset: 0;
@@ -553,6 +743,10 @@ watch(showUpdateConsole, (open) => {
   gap: 16px;
 }
 
+.update-progress-copy {
+  min-width: 0;
+}
+
 .update-console-title {
   margin: 6px 0 0;
   font-size: 1.15rem;
@@ -560,16 +754,127 @@ watch(showUpdateConsole, (open) => {
   color: #e2e8f0;
 }
 
-.update-console-help {
-  margin: 0;
+.update-progress-detail {
+  margin: 8px 0 0;
   color: #94a3b8;
   font-size: 0.92rem;
   line-height: 1.6;
 }
 
+.update-progress-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 18px;
+  padding: 18px;
+  background: rgba(15, 23, 42, 0.34);
+}
+
+.update-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+}
+
+.update-progress-head strong {
+  font-size: 1rem;
+  color: #f8fafc;
+}
+
+.update-progress-track {
+  height: 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.update-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bdf8, #2563eb 55%, #22c55e);
+  transition: width 0.24s ease;
+}
+
+.update-progress-fill.is-failed {
+  background: linear-gradient(90deg, #f97316, #ef4444);
+}
+
+.update-phase-list {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.update-phase-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  padding: 0 12px;
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.22);
+}
+
+.update-phase-item .phase-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.35);
+  flex-shrink: 0;
+}
+
+.update-phase-item.is-active {
+  color: #dbeafe;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.update-phase-item.is-active .phase-dot {
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18);
+}
+
+.update-phase-item.is-done {
+  color: #dcfce7;
+  border-color: rgba(34, 197, 94, 0.25);
+}
+
+.update-phase-item.is-done .phase-dot {
+  background: #22c55e;
+}
+
+.update-phase-item.is-error {
+  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.28);
+}
+
+.update-phase-item.is-error .phase-dot {
+  background: #ef4444;
+}
+
+.update-log-shell {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.update-log-header {
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
 .update-console-output {
   flex: 1;
-  min-height: 360px;
+  min-height: 280px;
   margin: 0;
   overflow: auto;
   border-radius: 18px;
@@ -600,7 +905,7 @@ watch(showUpdateConsole, (open) => {
   }
 
   .update-console-output {
-    min-height: 280px;
+    min-height: 220px;
   }
 }
 </style>

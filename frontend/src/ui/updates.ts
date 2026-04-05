@@ -29,6 +29,8 @@ type UpdateApplyStatus = {
   succeeded?: boolean;
 };
 
+const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 const state = reactive({
   status: 'idle' as UpdateStatus,
   currentVersion: appSettings.about.appVersion,
@@ -168,10 +170,33 @@ const apply = async (): Promise<UpdateApplyResult> => {
   }
 };
 
+const waitForAppReload = async (opts?: { timeoutMs?: number; intervalMs?: number }) => {
+  const timeoutMs = opts?.timeoutMs ?? 240000;
+  const intervalMs = opts?.intervalMs ?? 2500;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const status = await syncStatus();
+      if (!status.inProgress && status.succeeded) {
+        window.location.reload();
+        return true;
+      }
+    } catch {
+      // The stack may be restarting. Keep polling until it comes back.
+    }
+
+    await delay(intervalMs);
+  }
+
+  return false;
+};
+
 export const updates = {
   state,
   refresh,
   apply,
   syncStatus,
   openUpdateUrl,
+  waitForAppReload,
 };
