@@ -1,0 +1,154 @@
+name: Docker Build And Push
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dockerhub_namespace:
+        description: "Docker Hub namespace (optional)"
+        required: false
+        default: ""
+      repo_prefix:
+        description: "Repository prefix"
+        required: false
+        default: "docker-manager"
+      service:
+        description: "Service to build/push"
+        required: false
+        type: choice
+        options:
+          - all
+          - backend
+          - frontend
+        default: all
+      image_tag:
+        description: "Custom image tag (optional)"
+        required: false
+        default: ""
+      auto_increment_tag:
+        description: "Auto increment Docker Hub tag vX.Y"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: docker-build-push-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DEFAULT_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+      DEFAULT_REPO_PREFIX: docker-manager
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          input_namespace="${{ github.event.inputs.dockerhub_namespace || '' }}"
+          input_repo_prefix="${{ github.event.inputs.repo_prefix || '' }}"
+          input_service="${{ github.event.inputs.service || '' }}"
+          input_tag="${{ github.event.inputs.image_tag || '' }}"
+          input_auto_increment="${{ github.event.inputs.auto_increment_tag || 'false' }}"
+
+          namespace="${input_namespace:-${DEFAULT_NAMESPACE:-${DOCKERHUB_USERNAME:-}}}"
+          repo_prefix="${input_repo_prefix:-${DEFAULT_REPO_PREFIX}}"
+          service="${input_service:-all}"
+
+          if [[ -z "${namespace}" ]]; then
+            echo "Missing Docker Hub namespace. Set workflow input 'dockerhub_namespace' or repo variable 'DOCKERHUB_NAMESPACE' or secret 'DOCKERHUB_USERNAME'."
+            exit 1
+          fi
+
+          if [[ "${service}" != "all" && "${service}" != "backend" && "${service}" != "frontend" ]]; then
+            echo "Invalid service: ${service}. Expected all|backend|frontend."
+            exit 1
+          fi
+
+          requested_tag="${input_tag}"
+          if [[ -n "${requested_tag}" ]]; then
+            resolved_tag="${requested_tag}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            resolved_tag="${GITHUB_REF_NAME}"
+          else
+            safe_branch="$(echo "${GITHUB_REF_NAME}" | sed -E 's/[^A-Za-z0-9._-]+/-/g')"
+            resolved_tag="${safe_branch}-${GITHUB_RUN_NUMBER}"
+          fi
+
+          if [[ "${input_auto_increment}" == "true" ]]; then
+            if [[ "${service}" == "backend" ]]; then
+              target_repo="${repo_prefix}-backend"
+            else
+              target_repo="${repo_prefix}-frontend"
+            fi
+
+            latest_tag="$(
+              curl -fsSL "https://hub.docker.com/v2/namespaces/${namespace}/repositories/${target_repo}/tags?page_size=100" \
+              | grep -oE '"name"[[:space:]]*:[[:space:]]*"v[0-9]+\.[0-9]+"' \
+              | sed -E 's/.*"name"[[:space:]]*:[[:space:]]*"(v[0-9]+\.[0-9]+)".*/\1/' \
+              | sort -V \
+              | tail -n 1
+            )"
+
+            if [[ "${latest_tag}" =~ ^v[0-9]+\.[0-9]+$ ]]; then
+              major="${latest_tag#v}"
+              major="${major%%.*}"
+              minor="${latest_tag#*.}"
+              minor="$((minor + 1))"
+              if [[ "${minor}" -ge 10 ]]; then
+                major="$((major + 1))"
+                minor=0
+              fi
+              resolved_tag="v${major}.${minor}"
+            else
+              resolved_tag="v1.0"
+            fi
+          fi
+
+          build_date="$(date -u +%F)"
+
+          echo "namespace=${namespace}" >> "${GITHUB_OUTPUT}"
+          echo "repo_prefix=${repo_prefix}" >> "${GITHUB_OUTPUT}"
+          echo "service=${service}" >> "${GITHUB_OUTPUT}"
+          echo "image_tag=${resolved_tag}" >> "${GITHUB_OUTPUT}"
+          echo "build_date=${build_date}" >> "${GITHUB_OUTPUT}"
+
+      - name: Docker login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ env.DOCKERHUB_TOKEN }}
+
+      - name: Build and push with run-prod.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./run-prod.sh
+          APP_VERSION="${{ steps.meta.outputs.image_tag }}" \
+          BUILD_DATE="${{ steps.meta.outputs.build_date }}" \
+          ./run-prod.sh push \
+            "${{ steps.meta.outputs.namespace }}" \
+            "${{ steps.meta.outputs.repo_prefix }}" \
+            "${{ steps.meta.outputs.service }}" \
+            "${{ steps.meta.outputs.image_tag }}"
+
+      - name: Summary
+        shell: bash
+        run: |
+          echo "Pushed service=${{ steps.meta.outputs.service }} tag=${{ steps.meta.outputs.image_tag }}"
+          echo "Namespace=${{ steps.meta.outputs.namespace }}"
+          echo "Repo prefix=${{ steps.meta.outputs.repo_prefix }}"

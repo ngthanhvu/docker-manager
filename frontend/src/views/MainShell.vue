@@ -16,7 +16,6 @@ import {
 import { dockerApi } from '../api';
 import { appSettings } from '../ui/settings';
 import { persistStoredValue } from '../ui/viewState';
-import { authState, signOut } from '../ui/auth';
 import Dashboard from '../components/Dashboard.vue';
 import ContainerList from '../components/ContainerList.vue';
 import ImageList from '../components/ImageList.vue';
@@ -58,7 +57,6 @@ const setActiveTab = async (tabId: string) => {
 };
 
 const handleGlobalShortcut = (event: KeyboardEvent) => {
-  if (!authState.user) return;
   if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
   const target = event.target as HTMLElement | null;
   const tag = target?.tagName?.toLowerCase();
@@ -114,11 +112,6 @@ const setupStatsInterval = () => {
   if (ms > 0) {
     statsTimer = window.setInterval(fetchStats, ms);
   }
-};
-
-const logout = async () => {
-  await signOut();
-  await router.replace({ name: 'auth' });
 };
 
 onMounted(async () => {
@@ -219,17 +212,11 @@ watch(() => appSettings.general.autoRefreshMs, () => {
             </div>
 
             <div class="flex flex-wrap items-center gap-3">
-              <div class="border px-4 py-2 text-sm"
-                style="border-color: var(--glass-border); background: var(--glass);">
-                <span style="color: var(--text-muted);">{{ t('nav.user') }}</span>
-                <strong class="ml-2">{{ authState.user?.username }}</strong>
-              </div>
               <div v-if="systemInfo" class="flex items-center gap-3 border px-4 py-2 text-sm"
                 style="border-color: var(--glass-border); background: var(--glass);">
                 <span class="h-2.5 w-2.5 animate-pulse" style="background: var(--success);"></span>
                 Docker {{ systemInfo.ServerVersion }}
               </div>
-              <button class="btn text-danger" type="button" @click="logout">{{ t('nav.logout') }}</button>
             </div>
           </div>
         </header>

@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"docker-ui/auth"
 	"docker-ui/docker"
 	"docker-ui/ws"
 	"github.com/docker/docker/errdefs"
@@ -13,13 +12,7 @@ import (
 func SetupRouter() *mux.Router {
 	r := mux.NewRouter()
 
-	r.HandleFunc("/api/auth/status", AuthStatusHandler).Methods("GET")
-	r.HandleFunc("/api/auth/setup", AuthSetupHandler).Methods("POST")
-	r.HandleFunc("/api/auth/login", AuthLoginHandler).Methods("POST")
-
 	api := r.PathPrefix("/api").Subrouter()
-	api.Use(authService.Middleware)
-	api.HandleFunc("/auth/logout", AuthLogoutHandler).Methods("POST")
 
 	// Container routes
 	api.HandleFunc("/containers", ListContainersHandler).Methods("GET")
@@ -272,10 +265,6 @@ func DashboardMetricsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(metrics)
-}
-
-func CurrentUser(r *http.Request) *auth.User {
-	return auth.CurrentUser(r)
 }
 
 func ListComposeProjectsHandler(w http.ResponseWriter, r *http.Request) {

@@ -4,22 +4,10 @@ import { appSettings } from './ui/settings';
 
 const normalizeBase = (raw: string) => raw.replace(/\/+$/, '');
 const getApiBase = () => `${normalizeBase(appSettings.runtime.apiBaseUrl)}/api`;
-let authToken = '';
-let unauthorizedHandler: (() => void) | null = null;
 
 const api = axios.create({
   baseURL: getApiBase(),
 });
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error?.response?.status === 401) {
-      unauthorizedHandler?.();
-    }
-    return Promise.reject(error);
-  }
-);
 
 watch(
   () => appSettings.runtime.apiBaseUrl,
@@ -28,27 +16,7 @@ watch(
   }
 );
 
-export const setAuthToken = (token: string | null) => {
-  authToken = token?.trim() || '';
-  if (authToken) {
-    api.defaults.headers.common.Authorization = `Bearer ${authToken}`;
-    return;
-  }
-
-  delete api.defaults.headers.common.Authorization;
-};
-
-export const setUnauthorizedHandler = (handler: (() => void) | null) => {
-  unauthorizedHandler = handler;
-};
-
 export const dockerApi = {
-  // Auth
-  getAuthStatus: () => api.get('/auth/status'),
-  setupAuth: (payload: { username: string; password: string }) => api.post('/auth/setup', payload),
-  login: (payload: { username: string; password: string }) => api.post('/auth/login', payload),
-  logout: () => api.post('/auth/logout'),
-
   // Containers
   getContainers: () => api.get('/containers'),
   startContainer: (id: string) => api.post(`/containers/${id}/start`),
@@ -102,9 +70,5 @@ export const dockerApi = {
 export const getWsUrl = (path: string) => {
   const url = new URL(normalizeBase(appSettings.runtime.apiBaseUrl));
   const wsProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = new URL(`${wsProtocol}//${url.host}/ws${path}`);
-  if (authToken) {
-    wsUrl.searchParams.set('token', authToken);
-  }
-  return wsUrl.toString();
+  return `${wsProtocol}//${url.host}/ws${path}`;
 };

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"docker-ui/auth"
 	"docker-ui/docker"
 	"docker-ui/ws"
 	dockertypes "github.com/docker/docker/api/types"
@@ -324,17 +322,6 @@ func ApplyAppUpdateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func AppUpdateLogsWSHandler(w http.ResponseWriter, r *http.Request) {
-	if ws.RequestAuthorizer != nil {
-		if err := ws.RequestAuthorizer(r); err != nil {
-			status := http.StatusInternalServerError
-			if errors.Is(err, auth.ErrUnauthorized) {
-				status = http.StatusUnauthorized
-			}
-			http.Error(w, err.Error(), status)
-			return
-		}
-	}
-
 	conn, err := ws.Upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Failed to upgrade update log connection: %v", err)
