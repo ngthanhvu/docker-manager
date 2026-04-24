@@ -23,9 +23,14 @@ const languageLabelKey = computed(() => {
       return 'settings.english';
   }
 });
+const formatVersion = (version?: string | null) => {
+  const value = String(version || '').trim();
+  if (!value) return t('common.notAvailable');
+  return value.toLowerCase().startsWith('v') ? value : `v${value}`;
+};
 const summaryCards = computed(() => [
   { label: t('settings.activeLanguage'), value: t(languageLabelKey.value) },
-  { label: t('settings.appVersion'), value: `v${appSettings.about.appVersion}` },
+  { label: t('settings.appVersion'), value: formatVersion(appSettings.about.appVersion) },
   { label: t('settings.buildDate'), value: appSettings.about.buildDate },
 ]);
 
@@ -342,13 +347,12 @@ const applyUpdate = async () => {
               <div>
                 <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{
                   t('settings.currentVersion') }}</p>
-                <p class="mt-2 text-xl font-bold">v{{ updateState.currentVersion }}</p>
+                <p class="mt-2 text-xl font-bold">{{ formatVersion(updateState.currentVersion) }}</p>
               </div>
               <div>
                 <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{
                   t('settings.latestVersion') }}</p>
-                <p class="mt-2 text-xl font-bold">{{ updateState.latestVersion ? `${updateState.latestVersion}` :
-                  t('common.notAvailable') }}</p>
+                <p class="mt-2 text-xl font-bold">{{ formatVersion(updateState.latestVersion) }}</p>
               </div>
               <div>
                 <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{
@@ -444,7 +448,7 @@ const applyUpdate = async () => {
           style="border-color: var(--glass-border); background: var(--glass-border);">
           <div class="px-4 py-3 font-semibold" style="background: var(--table-header-bg);">{{ t('settings.appVersion')
           }}</div>
-          <div class="px-4 py-3" style="background: var(--bg-card);">v{{ appSettings.about.appVersion }}</div>
+          <div class="px-4 py-3" style="background: var(--bg-card);">{{ formatVersion(appSettings.about.appVersion) }}</div>
           <div class="px-4 py-3 font-semibold" style="background: var(--table-header-bg);">{{ t('settings.buildDate') }}
           </div>
           <div class="px-4 py-3" style="background: var(--bg-card);">{{ appSettings.about.buildDate }}</div>
