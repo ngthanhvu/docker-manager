@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Docke Manager App",
+  "productName": "Dock Manager App",
   "version": "0.1.0",
   "identifier": "com.ngthanhvu.dockemanagerapp",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Docke Manager",
+        "title": "Dock Manager",
         "width": 1800,
         "height": 900,
         "minWidth": 1024,

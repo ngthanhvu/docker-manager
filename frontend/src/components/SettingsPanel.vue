@@ -34,13 +34,6 @@ const summaryCards = computed(() => [
   { label: t('settings.buildDate'), value: appSettings.about.buildDate },
 ]);
 
-const resetUI = () => {
-  appSettings.ui.theme = 'dark';
-  appSettings.ui.density = 'comfortable';
-  appSettings.ui.fontScale = 1;
-  appSettings.ui.showSidebarStats = true;
-};
-
 const updateState = updates.state;
 
 const updateStatusTone = computed(() => {
@@ -139,7 +132,7 @@ const applyUpdate = async () => {
 
 <template>
   <div class="flex flex-col gap-6">
-    <section class="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+    <section>
       <div class="glass-panel p-6">
         <p class="section-heading">{{ t('settings.title') }}</p>
         <h2 class="max-w-3xl text-3xl font-bold tracking-tight">{{ t('settings.title') }}</h2>
@@ -153,37 +146,6 @@ const applyUpdate = async () => {
             <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{ card.label }}</p>
             <p class="mt-2 text-2xl font-bold">{{ card.value }}</p>
           </div>
-        </div>
-      </div>
-
-      <div class="glass-panel p-6">
-        <div class="mb-4 flex items-center justify-between gap-4">
-          <p class="section-heading mb-0">{{ t('settings.quickActions') }}</p>
-          <span class="border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
-            style="border-color: var(--primary); color: var(--primary);">
-            {{ t('settings.statusLive') }}
-          </span>
-        </div>
-
-        <div class="grid gap-4">
-          <label class="block">
-            <span class="mb-2 block text-sm font-semibold">{{ t('settings.language') }}</span>
-            <select v-model="appSettings.general.language" class="app-select">
-              <option value="vi">{{ t('settings.vietnamese') }}</option>
-              <option value="en">{{ t('settings.english') }}</option>
-              <option value="zh">{{ t('settings.chinese') }}</option>
-            </select>
-          </label>
-
-          <label class="block">
-            <span class="mb-2 block text-sm font-semibold">{{ t('settings.theme') }}</span>
-            <select v-model="appSettings.ui.theme" class="app-select">
-              <option value="dark">{{ t('settings.dark') }}</option>
-              <option value="light">{{ t('settings.light') }}</option>
-            </select>
-          </label>
-
-          <button class="btn btn-ghost w-full" @click="resetUI">{{ t('settings.resetUi') }}</button>
         </div>
       </div>
     </section>
@@ -225,15 +187,7 @@ const applyUpdate = async () => {
       <section class="glass-panel p-5">
         <p class="section-heading">{{ t('settings.interface') }}</p>
         <div class="grid gap-4 lg:grid-cols-2">
-          <label class="block">
-            <span class="mb-2 block text-sm font-semibold">{{ t('settings.theme') }}</span>
-            <select v-model="appSettings.ui.theme" class="app-select">
-              <option value="dark">{{ t('settings.dark') }}</option>
-              <option value="light">{{ t('settings.light') }}</option>
-            </select>
-          </label>
-
-          <label class="block">
+          <label class="block lg:col-span-2">
             <span class="mb-2 block text-sm font-semibold">{{ t('settings.density') }}</span>
             <select v-model="appSettings.ui.density" class="app-select">
               <option value="comfortable">{{ t('settings.comfortable') }}</option>

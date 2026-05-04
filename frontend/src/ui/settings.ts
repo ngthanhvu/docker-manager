@@ -1,8 +1,9 @@
 import { reactive, watch } from 'vue';
 
 const SETTINGS_KEY = 'docker-manager-settings-v1';
-const BUILD_APP_VERSION = String(import.meta.env.VITE_APP_VERSION || '2.1').trim();
+const BUILD_APP_VERSION = String(import.meta.env.VITE_APP_VERSION || '3.1.1').trim();
 const BUILD_DATE = String(import.meta.env.VITE_BUILD_DATE || '2026-03-30').trim();
+const DEFAULT_LANGUAGE = 'en';
 
 export type AppSettings = {
     general: {
@@ -49,7 +50,7 @@ const defaults: AppSettings = {
     general: {
         autoRefreshMs: 5000,
         confirmDestructive: true,
-        language: 'vi',
+        language: DEFAULT_LANGUAGE,
         timeFormat: '24h',
     },
     ui: {

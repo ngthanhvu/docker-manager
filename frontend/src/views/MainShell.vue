@@ -12,6 +12,9 @@ import {
   Cpu,
   Database,
   Settings,
+  Moon,
+  Sun,
+  ChevronDown,
 } from 'lucide-vue-next';
 import { dockerApi } from '../api';
 import { appSettings } from '../ui/settings';
@@ -29,6 +32,7 @@ const route = useRoute();
 const router = useRouter();
 const systemInfo = ref<any>(null);
 const resourceCounts = ref<{ volumes: number; networks: number }>({ volumes: 0, networks: 0 });
+const languageMenuOpen = ref(false);
 let statsTimer: number | null = null;
 
 const tabs = [
@@ -49,6 +53,27 @@ const activeTab = computed(() => {
 });
 
 const activeTabMeta = computed(() => tabs.find((tab) => tab.id === activeTab.value) ?? tabs[0]);
+
+const languages = [
+  { value: 'vi', flagClass: 'fi fi-vn' },
+  { value: 'en', flagClass: 'fi fi-sh' },
+  { value: 'zh', flagClass: 'fi fi-cn' },
+] as const;
+
+const activeLanguage = computed(() =>
+  languages.find((language) => language.value === appSettings.general.language) ?? languages[1]
+);
+
+const languageLabelKeys: Record<typeof languages[number]['value'], string> = {
+  vi: 'settings.vietnamese',
+  en: 'settings.english',
+  zh: 'settings.chinese',
+};
+
+const setLanguage = (language: typeof languages[number]['value']) => {
+  appSettings.general.language = language;
+  languageMenuOpen.value = false;
+};
 
 const setActiveTab = async (tabId: string) => {
   if (!validTabIds.has(tabId)) return;
@@ -136,7 +161,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 
 <template>
   <div class="flex min-h-screen bg-transparent">
-    <aside class="hidden w-[292px] shrink-0 p-4 lg:block">
+    <aside class="hidden w-73 shrink-0 p-4 lg:block">
       <div class="glass-panel flex h-[calc(100vh-2rem)] flex-col overflow-hidden">
         <div class="border-b px-6 py-6" style="border-color: var(--glass-border);">
           <div class="mb-2 flex items-center gap-3">
@@ -146,13 +171,10 @@ watch(() => appSettings.general.autoRefreshMs, () => {
             </div>
             <div>
               <p class="text-[11px] uppercase tracking-[0.24em]" style="color: var(--text-muted);">{{ t('nav.opsPanel')
-                }}</p>
+              }}</p>
               <div class="text-xl font-bold tracking-tight">Dock Manager</div>
             </div>
           </div>
-          <!-- <p class="max-w-[220px] text-sm leading-6" style="color: var(--text-muted);">
-            {{ t('nav.shellDescription') }}
-          </p> -->
         </div>
 
         <nav class="flex flex-1 flex-col gap-2 p-4">
@@ -204,14 +226,52 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 {{ activeTabMeta ? t(activeTabMeta.nameKey) : '' }}
               </p>
               <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">{{ activeTabMeta ? t(activeTabMeta.nameKey) : ''
-                }}</h1>
-              <p v-if="activeTab === 'dashboard'" class="mt-2 max-w-2xl text-sm leading-6"
-                style="color: var(--text-muted);">
-                {{ t('nav.dashboardSubtitle') }}
-              </p>
+              }}</h1>
             </div>
 
-            <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap items-center justify-end gap-3">
+              <div class="relative">
+                <button
+                  class="inline-flex h-10 items-center justify-between gap-3 border px-3 text-sm font-semibold transition cursor-pointer"
+                  type="button" :aria-label="t(languageLabelKeys[activeLanguage.value])"
+                  :aria-expanded="languageMenuOpen"
+                  style="border-color: var(--glass-border); background: var(--glass); color: var(--text-main);"
+                  @click="languageMenuOpen = !languageMenuOpen">
+                  <span class="inline-flex items-center gap-2">
+                    <span :class="activeLanguage.flagClass"></span>
+                  </span>
+                  <ChevronDown :size="16" style="color: var(--text-muted);" />
+                </button>
+
+                <div v-if="languageMenuOpen"
+                  class="absolute right-0 z-30 mt-2 grid border p-1 shadow-[4px_4px_0_rgba(0,0,0,0.28)]"
+                  style="border-color: var(--glass-border); background: var(--bg-card);">
+                  <button v-for="language in languages" :key="language.value"
+                    class="inline-flex h-9 w-11 items-center justify-center text-sm font-semibold transition cursor-pointer"
+                    :aria-label="t(languageLabelKeys[language.value])" type="button" :style="appSettings.general.language === language.value
+                      ? 'background: var(--primary); color: white;'
+                      : 'background: transparent; color: var(--text-main);'" @click="setLanguage(language.value)">
+                    <span :class="language.flagClass"></span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="inline-flex items-center border p-1"
+                style="border-color: var(--glass-border); background: var(--glass);">
+                <button class="grid h-8 w-10 place-items-center transition cursor-pointer" type="button"
+                  :title="t('settings.dark')" :aria-label="t('settings.dark')" :style="appSettings.ui.theme === 'dark'
+                    ? 'background: var(--primary); color: white;'
+                    : 'background: transparent; color: var(--text-main);'" @click="appSettings.ui.theme = 'dark'">
+                  <Moon :size="17" />
+                </button>
+                <button class="grid h-8 w-10 place-items-center transition cursor-pointer" type="button"
+                  :title="t('settings.light')" :aria-label="t('settings.light')" :style="appSettings.ui.theme === 'light'
+                    ? 'background: var(--primary); color: white;'
+                    : 'background: transparent; color: var(--text-main);'" @click="appSettings.ui.theme = 'light'">
+                  <Sun :size="17" />
+                </button>
+              </div>
+
               <div v-if="systemInfo" class="flex items-center gap-3 border px-4 py-2 text-sm"
                 style="border-color: var(--glass-border); background: var(--glass);">
                 <span class="h-2.5 w-2.5 animate-pulse" style="background: var(--success);"></span>

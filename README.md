@@ -70,12 +70,13 @@ go run .
 ```powershell
 cd ..
 npm --prefix frontend install
-npx tauri dev
+npx @tauri-apps/cli dev
 ```
 
 > **Ghi chú:**
 > - Frontend sẽ chạy dev server tại `http://localhost:5173` (do Tauri tự gọi qua `beforeDevCommand`)
 > - Backend API ở `http://localhost:8080`
+> - Dùng `@tauri-apps/cli` cho Tauri v2. Không dùng `npx tauri dev` vì npm sẽ tải package `tauri` cũ và có thể báo lỗi `could not determine executable to run`.
 
 ### Cách 2: Chạy bằng Docker
 
@@ -93,7 +94,7 @@ Service sẽ chạy tại:
 
 ```powershell
 npm --prefix frontend install
-npx tauri build
+npx @tauri-apps/cli build
 ```
 
 **Output sau khi build:**

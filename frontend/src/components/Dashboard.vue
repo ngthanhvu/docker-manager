@@ -551,10 +551,12 @@ watch(activeNetworkInterfaces, (interfaces) => {
       ]" :key="card.key" class="glass-panel p-5">
         <div class="mb-6 flex items-start justify-between gap-4">
           <div>
-            <p class="mb-2 text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{ card.label }}</p>
+            <p class="mb-2 text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{ card.label }}
+            </p>
             <div class="text-3xl font-bold tracking-tight">{{ card.value }}</div>
           </div>
-          <div class="grid h-11 w-11 place-items-center border" :style="{ borderColor: card.tone, color: card.tone, background: 'color-mix(in srgb, ' + card.tone + ' 12%, transparent)' }">
+          <div class="grid h-11 w-11 place-items-center border"
+            :style="{ borderColor: card.tone, color: card.tone, background: 'color-mix(in srgb, ' + card.tone + ' 12%, transparent)' }">
             <component :is="card.icon" :size="18" />
           </div>
         </div>
@@ -568,11 +570,10 @@ watch(activeNetworkInterfaces, (interfaces) => {
       <section class="glass-panel p-5">
         <p class="section-heading">{{ t('dashboard.statusRings') }}</p>
         <div class="grid gap-5 md:grid-cols-3 2xl:grid-cols-1">
-          <div v-for="g in gauges" :key="g.key" class="border p-4 text-center" style="border-color: var(--glass-border); background: var(--glass);">
-            <div
-              class="mx-auto grid h-32 w-32 place-items-center rounded-full border-[10px]"
-              :style="{ borderColor: 'rgba(255,255,255,0.08)', borderTopColor: 'var(--primary)', borderRightColor: g.key === 'memory' ? 'var(--warning)' : 'var(--primary)' }"
-            >
+          <div v-for="g in gauges" :key="g.key" class="border p-4 text-center"
+            style="border-color: var(--glass-border); background: var(--glass);">
+            <div class="mx-auto grid h-32 w-32 place-items-center rounded-full border-10"
+              :style="{ borderColor: 'rgba(255,255,255,0.08)', borderTopColor: 'var(--primary)', borderRightColor: g.key === 'memory' ? 'var(--warning)' : 'var(--primary)' }">
               <div class="text-center">
                 <div class="text-3xl font-bold leading-none">
                   {{ g.value }}<span class="text-base" style="color: var(--text-muted);">{{ g.unit }}</span>
@@ -599,25 +600,24 @@ watch(activeNetworkInterfaces, (interfaces) => {
 
           <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <div class="inline-flex border" style="border-color: var(--glass-border);">
-              <button
-                class="px-4 py-2 text-sm font-semibold"
+              <button class="px-4 py-2 text-sm font-semibold"
                 :style="monitorMode === 'network' ? 'background: var(--primary); color: white;' : 'background: var(--glass); color: var(--text-muted);'"
-                @click="monitorMode = 'network'"
-              >
+                @click="monitorMode = 'network'">
                 {{ t('dashboard.network') }}
               </button>
-              <button
-                class="px-4 py-2 text-sm font-semibold"
+              <button class="px-4 py-2 text-sm font-semibold"
                 :style="monitorMode === 'disk' ? 'background: var(--primary); color: white;' : 'background: var(--glass); color: var(--text-muted);'"
-                @click="monitorMode = 'disk'"
-              >
+                @click="monitorMode = 'disk'">
                 {{ t('dashboard.disk') }}
               </button>
             </div>
 
-            <label v-if="monitorMode === 'network'" class="relative flex min-w-[190px] items-center border pr-10" style="border-color: var(--glass-border); background: var(--glass);">
-              <span class="px-3 text-xs uppercase tracking-[0.2em]" style="color: var(--text-muted);">{{ t('dashboard.iface') }}</span>
-              <select v-model="networkCard" class="app-select border-0 bg-transparent py-2 pr-8 pl-0 shadow-none focus:shadow-none">
+            <label v-if="monitorMode === 'network'" class="relative flex min-w-47.5 items-center border pr-10"
+              style="border-color: var(--glass-border); background: var(--glass);">
+              <span class="px-3 text-xs uppercase tracking-[0.2em]" style="color: var(--text-muted);">{{
+                t('dashboard.iface') }}</span>
+              <select v-model="networkCard"
+                class="app-select border-0 bg-transparent py-2 pr-8 pl-0 shadow-none focus:shadow-none">
                 <option v-for="option in availableNetworkCards" :key="option" :value="option">
                   {{ option === 'all' ? t('dashboard.all') : option }}
                 </option>
@@ -628,7 +628,8 @@ watch(activeNetworkInterfaces, (interfaces) => {
         </div>
 
         <div class="mb-4 flex flex-wrap gap-2">
-          <div v-for="pill in monitoringPills" :key="pill.label" class="border px-3 py-2 text-sm" style="border-color: var(--glass-border); background: var(--glass);">
+          <div v-for="pill in monitoringPills" :key="pill.label" class="border px-3 py-2 text-sm"
+            style="border-color: var(--glass-border); background: var(--glass);">
             <span style="color: var(--text-muted);">{{ pill.label }}:</span>
             <strong class="ml-2">{{ pill.value }}</strong>
           </div>
@@ -641,7 +642,7 @@ watch(activeNetworkInterfaces, (interfaces) => {
           </span>
         </div>
 
-        <VChart class="h-[460px] w-full" :option="monitoringChartOption" autoresize />
+        <VChart class="h-115 w-full" :option="monitoringChartOption" autoresize />
       </section>
     </div>
   </div>

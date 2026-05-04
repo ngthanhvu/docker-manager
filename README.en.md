@@ -71,12 +71,13 @@ go run .
 ```powershell
 cd ..
 npm --prefix frontend install
-npx tauri dev
+npx @tauri-apps/cli dev
 ```
 
 > **Notes:**
 > - Frontend dev server runs at `http://localhost:5173` (via Tauri's `beforeDevCommand`)
 > - Backend API at `http://localhost:8080`
+> - Use `@tauri-apps/cli` for Tauri v2. Do not use `npx tauri dev`; npm may download the old `tauri` package and fail with `could not determine executable to run`.
 
 ### Option 2: Run with Docker
 
@@ -94,7 +95,7 @@ To build the application into an installer for end users:
 
 ```powershell
 npm --prefix frontend install
-npx tauri build
+npx @tauri-apps/cli build
 ```
 
 **Build output:**
