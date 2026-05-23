@@ -1,4 +1,4 @@
-import { nextTick, ref, type Ref, watch } from 'vue';
+import { nextTick, ref, type Ref, useTemplateRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -90,9 +90,9 @@ const getTerminalTheme = (themeName: TerminalThemeName) => {
 export const useContainerTerminal = (activeContainer: Ref<any | null>) => {
     const { t } = useI18n();
     const showTerminalModal = ref(false);
-    const terminalEl = ref<HTMLDivElement | null>(null);
+    const terminalEl = useTemplateRef<HTMLDivElement>('terminalEl');
     const terminalModalExpanded = ref(false);
-    const terminalModalPanel = ref<HTMLElement | null>(null);
+    const terminalModalPanel = useTemplateRef<HTMLElement>('terminalModalPanel');
     const terminalIsFullscreen = ref(false);
     let terminalSocket: WebSocket | null = null;
     let terminalReconnectTimer: number | null = null;
@@ -294,9 +294,7 @@ export const useContainerTerminal = (activeContainer: Ref<any | null>) => {
 
     return {
         showTerminalModal,
-        terminalEl,
         terminalModalExpanded,
-        terminalModalPanel,
         terminalIsFullscreen,
         terminalThemeOptions,
         openTerminal,

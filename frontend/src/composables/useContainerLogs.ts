@@ -1,4 +1,4 @@
-import { nextTick, ref, type Ref } from 'vue';
+import { nextTick, ref, type Ref, useTemplateRef } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { getWsUrl } from '../api';
 import { appSettings } from '../ui/settings';
@@ -7,7 +7,7 @@ export const useContainerLogs = (activeContainer: Ref<any | null>) => {
     const { t } = useI18n();
     const showLogsModal = ref(false);
     const logsOutput = ref('');
-    const logsEl = ref<HTMLElement | null>(null);
+    const logsEl = useTemplateRef<HTMLElement>('logsEl');
     const logsFollow = ref(true);
     const logsFontSize = ref(13);
     const logsModalExpanded = ref(false);
@@ -81,7 +81,6 @@ export const useContainerLogs = (activeContainer: Ref<any | null>) => {
     return {
         showLogsModal,
         logsOutput,
-        logsEl,
         logsFollow,
         logsFontSize,
         logsModalExpanded,

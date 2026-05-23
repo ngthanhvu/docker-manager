@@ -58,9 +58,7 @@ const sortDirection = ref<'asc' | 'desc'>('desc');
 
 const {
     showTerminalModal,
-    terminalEl,
     terminalModalExpanded,
-    terminalModalPanel,
     terminalIsFullscreen,
     terminalThemeOptions,
     openTerminal,
@@ -76,7 +74,6 @@ const {
 const {
     showLogsModal,
     logsOutput,
-    logsEl,
     logsFollow,
     logsFontSize,
     logsModalExpanded,
