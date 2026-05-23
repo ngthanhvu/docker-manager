@@ -18,6 +18,7 @@ const vi = {
     memory: 'Bộ nhớ',
     dashboardSubtitle: 'Theo dõi sức khỏe hệ thống, tài nguyên và lưu lượng Docker theo thời gian thực.',
     logout: 'Đăng xuất',
+    toggleSidebar: 'Đóng mở sidebar',
   },
   auth: {
     secureAccess: 'Truy cập bảo mật',

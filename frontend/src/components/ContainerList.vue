@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
     Play,
@@ -21,15 +21,16 @@ import {
     Minimize2,
     List,
     LayoutGrid,
-    Ellipsis
+    Ellipsis,
+    ChevronLeft,
+    ChevronRight
 } from 'lucide-vue-next';
-import { dockerApi, getWsUrl } from '../api';
+import { dockerApi } from '../api';
 import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
 import { loadStoredNumber, loadStoredString, persistStoredValue } from '../ui/viewState';
-import { Terminal as XTerm } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
+import { useContainerTerminal } from '../composables/useContainerTerminal';
+import { useContainerLogs } from '../composables/useContainerLogs';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 
@@ -55,112 +56,37 @@ const activeCardMenuId = ref<string | null>(null);
 const sortKey = ref<'name' | 'image' | 'status' | 'ports' | 'created'>('created');
 const sortDirection = ref<'asc' | 'desc'>('desc');
 
-const showLogsModal = ref(false);
-const logsOutput = ref('');
-const logsEl = ref<HTMLElement | null>(null);
-const logsFollow = ref(true);
-const logsFontSize = ref(13);
-const logsModalExpanded = ref(false);
-let logsSocket: WebSocket | null = null;
+const {
+    showTerminalModal,
+    terminalEl,
+    terminalModalExpanded,
+    terminalModalPanel,
+    terminalIsFullscreen,
+    terminalThemeOptions,
+    openTerminal,
+    closeTerminal,
+    adjustTerminalFontSize,
+    toggleTerminalSize,
+    copyTerminalSelection,
+    pasteIntoTerminal,
+    toggleTerminalFullscreen,
+    handleFullscreenChange,
+} = useContainerTerminal(activeContainer);
 
-const showTerminalModal = ref(false);
-const terminalEl = ref<HTMLDivElement | null>(null);
-const terminalModalExpanded = ref(false);
-const terminalModalPanel = ref<HTMLElement | null>(null);
-const terminalIsFullscreen = ref(false);
-let terminalSocket: WebSocket | null = null;
-let terminalReconnectTimer: number | null = null;
-let terminalReconnectAttempts = 0;
-let terminalManualClose = false;
-let xterm: XTerm | null = null;
-let fitAddon: FitAddon | null = null;
-let terminalResizeObserver: ResizeObserver | null = null;
-let terminalDataDisposable: { dispose: () => void } | null = null;
-let terminalContainerName = '';
-
-const terminalThemeOptions = [
-    { value: 'ocean', label: t('settings.themeOcean') },
-    { value: 'matrix', label: t('settings.themeMatrix') },
-    { value: 'amber', label: t('settings.themeAmber') },
-] as const;
-
-const getTerminalTheme = (themeName: 'ocean' | 'matrix' | 'amber') => {
-    if (themeName === 'matrix') {
-        return {
-            foreground: '#d1fae5',
-            background: '#03140c',
-            cursor: '#22c55e',
-            cursorAccent: '#03140c',
-            selectionBackground: 'rgba(34, 197, 94, 0.22)',
-            black: '#04130a',
-            red: '#f87171',
-            green: '#22c55e',
-            yellow: '#84cc16',
-            blue: '#34d399',
-            magenta: '#10b981',
-            cyan: '#2dd4bf',
-            white: '#d1fae5',
-            brightBlack: '#166534',
-            brightRed: '#fca5a5',
-            brightGreen: '#86efac',
-            brightYellow: '#bef264',
-            brightBlue: '#6ee7b7',
-            brightMagenta: '#34d399',
-            brightCyan: '#5eead4',
-            brightWhite: '#ecfdf5',
-        };
-    }
-
-    if (themeName === 'amber') {
-        return {
-            foreground: '#fef3c7',
-            background: '#1a1206',
-            cursor: '#f59e0b',
-            cursorAccent: '#1a1206',
-            selectionBackground: 'rgba(245, 158, 11, 0.24)',
-            black: '#120d05',
-            red: '#fb7185',
-            green: '#fbbf24',
-            yellow: '#f59e0b',
-            blue: '#fcd34d',
-            magenta: '#f97316',
-            cyan: '#fdba74',
-            white: '#fffbeb',
-            brightBlack: '#78350f',
-            brightRed: '#fda4af',
-            brightGreen: '#fde68a',
-            brightYellow: '#fcd34d',
-            brightBlue: '#fef08a',
-            brightMagenta: '#fdba74',
-            brightCyan: '#fed7aa',
-            brightWhite: '#fff7ed',
-        };
-    }
-
-    return {
-        foreground: '#dbeafe',
-        background: '#081121',
-        cursor: '#60a5fa',
-        cursorAccent: '#081121',
-        selectionBackground: 'rgba(96, 165, 250, 0.24)',
-        black: '#0f172a',
-        red: '#f87171',
-        green: '#34d399',
-        yellow: '#fbbf24',
-        blue: '#60a5fa',
-        magenta: '#c084fc',
-        cyan: '#22d3ee',
-        white: '#e2e8f0',
-        brightBlack: '#475569',
-        brightRed: '#fca5a5',
-        brightGreen: '#86efac',
-        brightYellow: '#fde68a',
-        brightBlue: '#93c5fd',
-        brightMagenta: '#d8b4fe',
-        brightCyan: '#67e8f9',
-        brightWhite: '#f8fafc',
-    };
-};
+const {
+    showLogsModal,
+    logsOutput,
+    logsEl,
+    logsFollow,
+    logsFontSize,
+    logsModalExpanded,
+    openLogs,
+    closeLogs,
+    handleLogsScroll,
+    jumpToLatestLogs,
+    adjustLogsFontSize,
+    toggleLogsSize,
+} = useContainerLogs(activeContainer);
 
 const getPortKey = (port: any) => [
     port?.IP || '',
@@ -463,238 +389,6 @@ const bulkRestart = async () => {
     }
 };
 
-const scrollToBottom = async () => {
-    await nextTick();
-    const el = logsEl.value;
-    if (el) el.scrollTop = el.scrollHeight;
-};
-
-const stripAnsi = (text: string) => text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
-
-const isNearBottom = () => {
-    const el = logsEl.value;
-    if (!el) return true;
-    return el.scrollHeight - el.scrollTop - el.clientHeight < 48;
-};
-
-const appendLogs = (text: string) => {
-    const shouldStickToBottom = logsFollow.value && isNearBottom();
-    logsOutput.value += stripAnsi(text);
-    if (shouldStickToBottom) {
-        scrollToBottom();
-    }
-};
-
-const closeLogs = () => {
-    showLogsModal.value = false;
-    logsModalExpanded.value = false;
-    if (logsSocket) {
-        logsSocket.close();
-        logsSocket = null;
-    }
-};
-
-const closeTerminal = () => {
-    showTerminalModal.value = false;
-    terminalModalExpanded.value = false;
-    if (document.fullscreenElement === terminalModalPanel.value) {
-        document.exitFullscreen().catch(() => { });
-    }
-    terminalIsFullscreen.value = false;
-    terminalManualClose = true;
-    if (terminalReconnectTimer) {
-        window.clearTimeout(terminalReconnectTimer);
-        terminalReconnectTimer = null;
-    }
-    if (terminalSocket) {
-        terminalSocket.close();
-        terminalSocket = null;
-    }
-    if (terminalResizeObserver && terminalEl.value) {
-        terminalResizeObserver.unobserve(terminalEl.value);
-    }
-    terminalResizeObserver = null;
-    if (xterm) {
-        if (terminalDataDisposable) {
-            terminalDataDisposable.dispose();
-            terminalDataDisposable = null;
-        }
-        xterm.dispose();
-        xterm = null;
-    }
-    fitAddon = null;
-};
-
-const openLogs = (container: any) => {
-    closeLogs();
-    activeContainer.value = container;
-    logsOutput.value = '';
-    logsFollow.value = true;
-    showLogsModal.value = true;
-
-    const tail = Math.max(50, Number(appSettings.runtime.defaultLogTail) || 300);
-    logsSocket = new WebSocket(getWsUrl(`/logs/${container.Id}?tail=${tail}`));
-    logsSocket.onopen = () => appendLogs(`${t('containersView.logsConnected', { name: getContainerName(container) })}\n`);
-    logsSocket.onmessage = (event) => appendLogs(String(event.data));
-    logsSocket.onerror = () => appendLogs(`\n${t('containersView.logsError')}\n`);
-    logsSocket.onclose = () => appendLogs(`\n${t('containersView.logsClosed')}\n`);
-};
-
-const handleLogsScroll = () => {
-    logsFollow.value = isNearBottom();
-};
-
-const jumpToLatestLogs = () => {
-    logsFollow.value = true;
-    scrollToBottom();
-};
-
-const adjustLogsFontSize = (delta: number) => {
-    logsFontSize.value = Math.min(20, Math.max(11, logsFontSize.value + delta));
-};
-
-const toggleLogsSize = () => {
-    logsModalExpanded.value = !logsModalExpanded.value;
-};
-
-const initTerminalUi = async () => {
-    await nextTick();
-    if (!terminalEl.value) return;
-    const terminalTheme = getTerminalTheme(appSettings.runtime.terminalTheme);
-    xterm = new XTerm({
-        cursorBlink: true,
-        fontFamily: 'JetBrains Mono, Fira Code, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace',
-        fontSize: appSettings.runtime.terminalFontSize,
-        convertEol: true,
-        theme: terminalTheme,
-    });
-    fitAddon = new FitAddon();
-    xterm.loadAddon(fitAddon);
-    xterm.open(terminalEl.value);
-    fitAddon.fit();
-    xterm.focus();
-    terminalDataDisposable = xterm.onData((data) => {
-        if (!terminalSocket || terminalSocket.readyState !== WebSocket.OPEN) return;
-        terminalSocket.send(data);
-    });
-    terminalResizeObserver = new ResizeObserver(() => fitAddon?.fit());
-    terminalResizeObserver.observe(terminalEl.value);
-};
-
-const writeTerminal = (text: string) => {
-    xterm?.write(text);
-};
-
-const adjustTerminalFontSize = (delta: number) => {
-    appSettings.runtime.terminalFontSize = Math.min(20, Math.max(11, appSettings.runtime.terminalFontSize + delta));
-    if (xterm) {
-        xterm.options.fontSize = appSettings.runtime.terminalFontSize;
-        fitAddon?.fit();
-        xterm.focus();
-    }
-};
-
-const toggleTerminalSize = async () => {
-    terminalModalExpanded.value = !terminalModalExpanded.value;
-    await nextTick();
-    fitAddon?.fit();
-    xterm?.focus();
-};
-
-const copyTerminalSelection = async () => {
-    const selectedText = xterm?.getSelection()?.trim() || '';
-    if (!selectedText) {
-        feedback.warning(t('containersView.selectTerminalText'));
-        return;
-    }
-    try {
-        await navigator.clipboard.writeText(selectedText);
-        feedback.success(t('containersView.selectionCopied'));
-    } catch (err) {
-        feedback.error(t('containersView.copyFailed', { error: String(err) }));
-    }
-};
-
-const pasteIntoTerminal = async () => {
-    if (!terminalSocket || terminalSocket.readyState !== WebSocket.OPEN) {
-        feedback.warning(t('containersView.terminalNotConnected'));
-        return;
-    }
-    try {
-        const text = await navigator.clipboard.readText();
-        if (!text) {
-            feedback.warning(t('containersView.clipboardEmpty'));
-            return;
-        }
-        terminalSocket.send(text);
-        xterm?.focus();
-    } catch (err) {
-        feedback.error(t('containersView.pasteFailed', { error: String(err) }));
-    }
-};
-
-const toggleTerminalFullscreen = async () => {
-    const panel = terminalModalPanel.value;
-    if (!panel) return;
-    try {
-        if (document.fullscreenElement === panel) {
-            await document.exitFullscreen();
-            terminalIsFullscreen.value = false;
-        } else {
-            await panel.requestFullscreen();
-            terminalIsFullscreen.value = true;
-        }
-        await nextTick();
-        fitAddon?.fit();
-        xterm?.focus();
-    } catch (err) {
-        feedback.error(t('containersView.fullscreenFailed', { error: String(err) }));
-    }
-};
-
-const handleFullscreenChange = async () => {
-    terminalIsFullscreen.value = document.fullscreenElement === terminalModalPanel.value;
-    await nextTick();
-    fitAddon?.fit();
-};
-
-const openTerminal = async (container: any) => {
-    closeTerminal();
-    activeContainer.value = container;
-    showTerminalModal.value = true;
-    terminalManualClose = false;
-    terminalReconnectAttempts = 0;
-    terminalContainerName = container.Names?.[0]?.replace('/', '') || container.Id.substring(0, 12);
-    await initTerminalUi();
-
-    const connectTerminal = (silent = false) => {
-        const shell = encodeURIComponent(appSettings.runtime.terminalShell);
-        terminalSocket = new WebSocket(getWsUrl(`/terminal/${container.Id}?shell=${shell}`));
-        terminalSocket.onopen = () => {
-            terminalReconnectAttempts = 0;
-            if (!silent) {
-                writeTerminal(`\r\n${t('containersView.terminalConnected', { name: terminalContainerName })}\r\n`);
-            }
-            xterm?.focus();
-        };
-        terminalSocket.onmessage = (event) => writeTerminal(String(event.data));
-        terminalSocket.onerror = () => writeTerminal(`\r\n${t('containersView.terminalError')}\r\n`);
-        terminalSocket.onclose = () => {
-            terminalSocket = null;
-            if (terminalManualClose || !showTerminalModal.value) return;
-            terminalReconnectAttempts += 1;
-            if (terminalReconnectAttempts <= 3) {
-                writeTerminal(`\r\n${t('containersView.terminalReconnect', { attempt: terminalReconnectAttempts })}\r\n`);
-                terminalReconnectTimer = window.setTimeout(() => connectTerminal(true), 900);
-                return;
-            }
-            writeTerminal(`\r\n${t('containersView.terminalClosed')}\r\n`);
-        };
-    };
-
-    connectTerminal();
-};
-
 const handleAction = async (action: string, id: string) => {
     try {
         if (action === 'start') await dockerApi.startContainer(id);
@@ -810,18 +504,6 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     setupInterval();
 });
 
-watch(() => appSettings.runtime.terminalTheme, (themeName) => {
-    if (!xterm) return;
-    xterm.options.theme = getTerminalTheme(themeName);
-    fitAddon?.fit();
-});
-
-watch(() => appSettings.runtime.terminalFontSize, (fontSize) => {
-    if (!xterm) return;
-    xterm.options.fontSize = fontSize;
-    fitAddon?.fit();
-});
-
 watch(
     [showLogsModal, showTerminalModal],
     ([logsOpen, terminalOpen]) => {
@@ -884,11 +566,11 @@ watch(
                             <input class="bulk-checkbox" type="checkbox" :checked="allPageSelected"
                                 @change="toggleSelectAllPage" />
                         </th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('name')">{{ t('containersView.name') }}<span class="sort-indicator">{{ getSortIndicator('name') }}</span></button></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('image')">{{ t('containersView.image') }}<span class="sort-indicator">{{ getSortIndicator('image') }}</span></button></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('status')">{{ t('containersView.status') }}<span class="sort-indicator">{{ getSortIndicator('status') }}</span></button></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('ports')">{{ t('containersView.ports') }}<span class="sort-indicator">{{ getSortIndicator('ports') }}</span></button></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('created')">{{ t('containersView.created') }}<span class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
+                        <th class="name-cell"><button class="sort-header" type="button" @click="toggleSort('name')">{{ t('containersView.name') }}<span class="sort-indicator">{{ getSortIndicator('name') }}</span></button></th>
+                        <th class="image-cell"><button class="sort-header" type="button" @click="toggleSort('image')">{{ t('containersView.image') }}<span class="sort-indicator">{{ getSortIndicator('image') }}</span></button></th>
+                        <th class="status-cell"><button class="sort-header" type="button" @click="toggleSort('status')">{{ t('containersView.status') }}<span class="sort-indicator">{{ getSortIndicator('status') }}</span></button></th>
+                        <th class="ports-cell"><button class="sort-header" type="button" @click="toggleSort('ports')">{{ t('containersView.ports') }}<span class="sort-indicator">{{ getSortIndicator('ports') }}</span></button></th>
+                        <th class="time-cell"><button class="sort-header" type="button" @click="toggleSort('created')">{{ t('containersView.created') }}<span class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
                         <th class="actions-cell">{{ t('common.actions') }}</th>
                     </tr>
                 </thead>
@@ -1068,11 +750,13 @@ watch(
                 <span>{{ pageStart }}-{{ pageEnd }} / {{ totalItems }}</span>
             </div>
             <div class="pager-actions">
-                <button class="btn btn-ghost" :disabled="currentPage === 1" @click="currentPage--">{{ t('common.prev')
-                    }}</button>
+                <button class="btn btn-ghost btn-icon" :disabled="currentPage === 1" :aria-label="t('common.prev')" :title="t('common.prev')" @click="currentPage--">
+                    <ChevronLeft :size="16" />
+                </button>
                 <span class="pager-page">{{ t('common.page') }} {{ currentPage }} / {{ totalPages }}</span>
-                <button class="btn btn-ghost" :disabled="currentPage >= totalPages" @click="currentPage++">{{
-                    t('common.next') }}</button>
+                <button class="btn btn-ghost btn-icon" :disabled="currentPage >= totalPages" :aria-label="t('common.next')" :title="t('common.next')" @click="currentPage++">
+                    <ChevronRight :size="16" />
+                </button>
             </div>
         </div>
 
@@ -1365,6 +1049,7 @@ watch(
     font-weight: 600;
     color: var(--text-muted);
     border-bottom: 1px solid var(--glass-border);
+    vertical-align: middle;
 }
 
 .sort-header {
@@ -1388,6 +1073,7 @@ watch(
     padding: 16px 24px;
     font-size: 0.9rem;
     border-bottom: 1px solid var(--glass-border);
+    vertical-align: middle;
 }
 
 .check-col {
@@ -1408,10 +1094,38 @@ watch(
 
 .status-cell {
     min-width: 190px;
+    text-align: center;
 }
 
 .ports-cell {
     min-width: 240px;
+    text-align: center;
+}
+
+.time-cell {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.actions-cell {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.status-cell .status-badge,
+.ports-cell .port-list,
+.actions-cell .action-group {
+    justify-content: center;
+}
+
+th.status-cell .sort-header,
+th.ports-cell .sort-header {
+    justify-content: center;
+}
+
+th.time-cell .sort-header {
+    justify-content: flex-end;
+    width: 100%;
 }
 
 .bulk-checkbox {

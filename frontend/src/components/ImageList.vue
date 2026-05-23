@@ -1,215 +1,37 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { Box, Trash2, RefreshCw, BrushCleaning, List, LayoutGrid, Ellipsis } from 'lucide-vue-next';
-import { useI18n } from 'vue-i18n';
-import { dockerApi } from '../api';
-import { feedback } from '../ui/feedback';
-import { appSettings } from '../ui/settings';
-import { loadStoredNumber, persistStoredValue } from '../ui/viewState';
+import { Box, Trash2, RefreshCw, BrushCleaning, List, LayoutGrid, Ellipsis, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { useImageList } from '../composables/useImageList';
 import dayjs from 'dayjs';
 
-const images = ref<any[]>([]);
-const loading = ref(true);
-const currentPage = ref(1);
-const IMAGE_PAGE_SIZE_KEY = 'dock-manager.images.page-size';
-const IMAGE_VIEW_MODE_KEY = 'dock-manager.images.view-mode';
-const pageSize = ref(loadStoredNumber(IMAGE_PAGE_SIZE_KEY, 10, 10, 50));
-const viewMode = ref<'list' | 'card'>(localStorage.getItem(IMAGE_VIEW_MODE_KEY) === 'card' ? 'card' : 'list');
-const pageSizeOptions = [10, 20, 50];
-const selectedIds = ref<string[]>([]);
-const pruning = ref(false);
-const activeCardMenuId = ref<string | null>(null);
-const sortKey = ref<'repoTag' | 'id' | 'size' | 'created'>('created');
-const sortDirection = ref<'asc' | 'desc'>('desc');
-const { t } = useI18n();
-
-const formatBytes = (bytes?: number) => {
-    if (!bytes || bytes <= 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let value = bytes;
-    let unitIndex = 0;
-    while (value >= 1024 && unitIndex < units.length - 1) {
-        value /= 1024;
-        unitIndex += 1;
-    }
-    return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
-};
-
-const fetchImages = async () => {
-    try {
-        loading.value = true;
-        const { data } = await dockerApi.getImages();
-        images.value = data || [];
-    } catch (err) {
-        console.error('Failed to fetch images:', err);
-    } finally {
-        loading.value = false;
-    }
-};
-
-const removeImage = async (id: string) => {
-    const accepted = await feedback.confirmAction({
-        title: t('imagesView.deleteTitle'),
-        message: t('imagesView.deleteMessage'),
-        confirmText: t('common.delete'),
-        danger: true,
-        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
-    });
-    if (!accepted) return;
-    try {
-        await dockerApi.removeImage(id);
-        selectedIds.value = selectedIds.value.filter((x) => x !== id);
-        await fetchImages();
-        feedback.success(t('imagesView.deletedSuccess'));
-    } catch (err) {
-        feedback.error(t('imagesView.deleteFailed', { error: String(err) }));
-    }
-};
-
-const bulkDelete = async () => {
-    if (selectedIds.value.length === 0) return;
-    const removeCount = selectedIds.value.length;
-    const accepted = await feedback.confirmAction({
-        title: t('imagesView.deleteManyTitle'),
-        message: t('imagesView.deleteManyMessage', { count: removeCount }),
-        confirmText: t('common.delete'),
-        danger: true,
-        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
-    });
-    if (!accepted) return;
-    try {
-        for (const id of selectedIds.value) {
-            await dockerApi.removeImage(id);
-        }
-        selectedIds.value = [];
-        await fetchImages();
-        feedback.success(t('imagesView.deletedManySuccess', { count: removeCount }));
-    } catch (err) {
-        feedback.error(t('imagesView.bulkDeleteFailed', { error: String(err) }));
-    }
-};
-
-const pruneImages = async () => {
-    if (pruning.value) return;
-    const accepted = await feedback.confirmAction({
-        title: t('imagesView.pruneTitle'),
-        message: t('imagesView.pruneMessage'),
-        confirmText: t('common.prune'),
-        danger: true,
-        requireText: appSettings.safety.softDeleteRequireTyping ? 'PRUNE' : undefined,
-    });
-    if (!accepted) return;
-    try {
-        pruning.value = true;
-        const { data } = await dockerApi.pruneImages();
-        await fetchImages();
-        const deletedCount = Array.isArray(data?.ImagesDeleted) ? data.ImagesDeleted.length : 0;
-        const reclaimed = formatBytes(Number(data?.SpaceReclaimed || 0));
-        feedback.success(t('imagesView.prunedSuccess', { count: deletedCount, size: reclaimed }));
-    } catch (err) {
-        feedback.error(t('imagesView.pruneFailed', { error: String(err) }));
-    } finally {
-        pruning.value = false;
-    }
-};
-
-const formatSize = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-
-const compareValues = (left: string | number, right: string | number) => {
-    if (typeof left === 'number' && typeof right === 'number') return left - right;
-    return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
-};
-
-const getImageSortValue = (image: any) => {
-    if (sortKey.value === 'repoTag') return image.RepoTags?.[0] || '<none>:<none>';
-    if (sortKey.value === 'id') return image.Id.substring(7, 19);
-    if (sortKey.value === 'size') return Number(image.Size || 0);
-    return Number(image.Created || 0);
-};
-
-const sortedImages = computed(() => {
-    const list = [...images.value];
-    list.sort((a, b) => {
-        const result = compareValues(getImageSortValue(a), getImageSortValue(b));
-        return sortDirection.value === 'asc' ? result : -result;
-    });
-    return list;
-});
-
-const totalItems = computed(() => sortedImages.value.length);
-const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)));
-const paginatedImages = computed(() => {
-    const start = (currentPage.value - 1) * pageSize.value;
-    return sortedImages.value.slice(start, start + pageSize.value);
-});
-const pageStart = computed(() => (totalItems.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1));
-const pageEnd = computed(() => Math.min(currentPage.value * pageSize.value, totalItems.value));
-
-const pageImageIds = computed(() => paginatedImages.value.map((img) => img.Id));
-const selectedCount = computed(() => selectedIds.value.length);
-const allPageSelected = computed(() => pageImageIds.value.length > 0 && pageImageIds.value.every((id) => selectedIds.value.includes(id)));
-
-const toggleSelect = (id: string) => {
-    if (selectedIds.value.includes(id)) selectedIds.value = selectedIds.value.filter((x) => x !== id);
-    else selectedIds.value = [...selectedIds.value, id];
-};
-
-const toggleSelectAllPage = () => {
-    if (allPageSelected.value) selectedIds.value = selectedIds.value.filter((id) => !pageImageIds.value.includes(id));
-    else selectedIds.value = Array.from(new Set([...selectedIds.value, ...pageImageIds.value]));
-};
-
-const toggleCardMenu = (id: string) => {
-    activeCardMenuId.value = activeCardMenuId.value === id ? null : id;
-};
-
-const closeCardMenu = () => {
-    activeCardMenuId.value = null;
-};
-
-const handleDocumentClick = (event: MouseEvent) => {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('.card-actions-menu')) return;
-    closeCardMenu();
-};
-
-const toggleSort = (key: 'repoTag' | 'id' | 'size' | 'created') => {
-    if (sortKey.value === key) {
-        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
-        return;
-    }
-    sortKey.value = key;
-    sortDirection.value = key === 'created' ? 'desc' : 'asc';
-};
-
-const getSortIndicator = (key: 'repoTag' | 'id' | 'size' | 'created') => {
-    if (sortKey.value !== key) return '↕';
-    return sortDirection.value === 'asc' ? '↑' : '↓';
-};
-
-watch(pageSize, () => {
-    currentPage.value = 1;
-    persistStoredValue(IMAGE_PAGE_SIZE_KEY, pageSize.value);
-});
-watch(viewMode, () => {
-    persistStoredValue(IMAGE_VIEW_MODE_KEY, viewMode.value);
-});
-watch(totalPages, (maxPage) => {
-    if (currentPage.value > maxPage) currentPage.value = maxPage;
-});
-watch(images, (list) => {
-    const valid = new Set(list.map((img) => img.Id));
-    selectedIds.value = selectedIds.value.filter((id) => valid.has(id));
-});
-
-onMounted(() => {
-    fetchImages();
-    document.addEventListener('click', handleDocumentClick);
-});
-
-onUnmounted(() => {
-    document.removeEventListener('click', handleDocumentClick);
-});
+const {
+    t,
+    images,
+    loading,
+    currentPage,
+    pageSize,
+    pageSizeOptions,
+    viewMode,
+    selectedIds,
+    pruning,
+    activeCardMenuId,
+    selectedCount,
+    totalItems,
+    totalPages,
+    paginatedImages,
+    pageStart,
+    pageEnd,
+    allPageSelected,
+    fetchImages,
+    removeImage,
+    bulkDelete,
+    pruneImages,
+    formatSize,
+    toggleSelect,
+    toggleSelectAllPage,
+    toggleCardMenu,
+    toggleSort,
+    getSortIndicator,
+} = useImageList();
 </script>
 
 <template>
@@ -253,10 +75,10 @@ onUnmounted(() => {
                 <thead>
                     <tr>
                         <th class="check-col"><input class="bulk-checkbox" type="checkbox" :checked="allPageSelected" @change="toggleSelectAllPage" /></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('repoTag')">{{ t('imagesView.repositoryTag') }}<span class="sort-indicator">{{ getSortIndicator('repoTag') }}</span></button></th>
+                        <th class="name-cell"><button class="sort-header" type="button" @click="toggleSort('repoTag')">{{ t('imagesView.repositoryTag') }}<span class="sort-indicator">{{ getSortIndicator('repoTag') }}</span></button></th>
                         <th><button class="sort-header" type="button" @click="toggleSort('id')">ID<span class="sort-indicator">{{ getSortIndicator('id') }}</span></button></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('size')">{{ t('imagesView.size') }}<span class="sort-indicator">{{ getSortIndicator('size') }}</span></button></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('created')">{{ t('imagesView.created') }}<span class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
+                        <th class="size-cell"><button class="sort-header" type="button" @click="toggleSort('size')">{{ t('imagesView.size') }}<span class="sort-indicator">{{ getSortIndicator('size') }}</span></button></th>
+                        <th class="time-cell"><button class="sort-header" type="button" @click="toggleSort('created')">{{ t('imagesView.created') }}<span class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
                         <th class="actions-cell">{{ t('common.actions') }}</th>
                     </tr>
                 </thead>
@@ -265,8 +87,8 @@ onUnmounted(() => {
                         <td class="check-col"><input class="bulk-checkbox" type="checkbox" :checked="selectedIds.includes(image.Id)" @change="toggleSelect(image.Id)" /></td>
                         <td class="name-cell">{{ image.RepoTags?.[0] || '&lt;none&gt;:&lt;none&gt;' }}</td>
                         <td><code>{{ image.Id.substring(7, 19) }}</code></td>
-                        <td>{{ formatSize(image.Size) }}</td>
-                        <td>{{ dayjs.unix(image.Created).format('YYYY-MM-DD HH:mm') }}</td>
+                        <td class="size-cell">{{ formatSize(image.Size) }}</td>
+                        <td class="time-cell">{{ dayjs.unix(image.Created).format('YYYY-MM-DD HH:mm') }}</td>
                         <td class="actions-cell">
                             <div class="action-group">
                                 <button class="action-btn action-danger" :title="t('common.remove')" @click="removeImage(image.Id)">
@@ -333,9 +155,13 @@ onUnmounted(() => {
                 <span>{{ pageStart }}-{{ pageEnd }} / {{ totalItems }}</span>
             </div>
             <div class="pager-actions">
-                <button class="btn btn-ghost" :disabled="currentPage === 1" @click="currentPage--">{{ t('common.prev') }}</button>
+                <button class="btn btn-ghost btn-icon" :disabled="currentPage === 1" :aria-label="t('common.prev')" :title="t('common.prev')" @click="currentPage--">
+                    <ChevronLeft :size="16" />
+                </button>
                 <span class="pager-page">{{ t('common.page') }} {{ currentPage }} / {{ totalPages }}</span>
-                <button class="btn btn-ghost" :disabled="currentPage >= totalPages" @click="currentPage++">{{ t('common.next') }}</button>
+                <button class="btn btn-ghost btn-icon" :disabled="currentPage >= totalPages" :aria-label="t('common.next')" :title="t('common.next')" @click="currentPage++">
+                    <ChevronRight :size="16" />
+                </button>
             </div>
         </div>
     </div>
@@ -364,8 +190,8 @@ onUnmounted(() => {
 .card-meta-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .card-meta-label { font-size: 0.76rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
 .docker-table { width: 100%; border-collapse: collapse; }
-.docker-table th { text-align: left; padding: 14px 20px; font-size: 0.86rem; color: var(--text-muted); border-bottom: 1px solid var(--glass-border); }
-.docker-table td { padding: 14px 20px; font-size: 0.88rem; border-bottom: 1px solid var(--glass-border); }
+.docker-table th { text-align: left; padding: 14px 20px; font-size: 0.86rem; color: var(--text-muted); border-bottom: 1px solid var(--glass-border); vertical-align: middle; }
+.docker-table td { padding: 14px 20px; font-size: 0.88rem; border-bottom: 1px solid var(--glass-border); vertical-align: middle; }
 .sort-header { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .sort-indicator { font-size: 0.8em; color: var(--text-muted); }
 .check-col { width: 56px; text-align: center !important; padding: 10px !important; }
@@ -375,6 +201,10 @@ onUnmounted(() => {
 .docker-table tr:last-child td { border-bottom: none; }
 .docker-table tr:hover { background: var(--glass); }
 .name-cell { font-weight: 600; word-break: break-all; }
+.size-cell,
+.time-cell { text-align: right; white-space: nowrap; }
+th.size-cell .sort-header,
+th.time-cell .sort-header { justify-content: flex-end; width: 100%; }
 .actions-cell { width: 100px; text-align: center; }
 .action-group { display: flex; align-items: center; justify-content: center; }
 .card-actions-menu { position: absolute; top: 18px; right: 18px; }

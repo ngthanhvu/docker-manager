@@ -18,6 +18,7 @@ const en = {
     memory: 'Memory',
     dashboardSubtitle: 'Track system health, resources, and Docker throughput in real time.',
     logout: 'Logout',
+    toggleSidebar: 'Toggle sidebar',
   },
   auth: {
     secureAccess: 'Secure Access',

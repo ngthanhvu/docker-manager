@@ -1,200 +1,35 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { Network, Trash2, RefreshCw, BrushCleaning, List, LayoutGrid, Ellipsis } from 'lucide-vue-next';
-import { useI18n } from 'vue-i18n';
-import { dockerApi } from '../api';
-import { feedback } from '../ui/feedback';
-import { appSettings } from '../ui/settings';
-import { loadStoredNumber, persistStoredValue } from '../ui/viewState';
+import { Network, Trash2, RefreshCw, BrushCleaning, List, LayoutGrid, Ellipsis, ChevronLeft, ChevronRight } from 'lucide-vue-next';
+import { useNetworkList } from '../composables/useNetworkList';
 
-const networks = ref<any[]>([]);
-const loading = ref(true);
-const currentPage = ref(1);
-const NETWORK_PAGE_SIZE_KEY = 'dock-manager.networks.page-size';
-const NETWORK_VIEW_MODE_KEY = 'dock-manager.networks.view-mode';
-const pageSize = ref(loadStoredNumber(NETWORK_PAGE_SIZE_KEY, 10, 10, 50));
-const viewMode = ref<'list' | 'card'>(localStorage.getItem(NETWORK_VIEW_MODE_KEY) === 'card' ? 'card' : 'list');
-const pageSizeOptions = [10, 20, 50];
-const selectedIds = ref<string[]>([]);
-const pruning = ref(false);
-const activeCardMenuId = ref<string | null>(null);
-const sortKey = ref<'name' | 'id' | 'driver' | 'scope' | 'internal'>('name');
-const sortDirection = ref<'asc' | 'desc'>('asc');
-const { t } = useI18n();
-
-const fetchNetworks = async () => {
-    try {
-        loading.value = true;
-        const { data } = await dockerApi.getNetworks();
-        networks.value = data || [];
-    } catch (err) {
-        console.error('Failed to fetch networks:', err);
-    } finally {
-        loading.value = false;
-    }
-};
-
-const removeNetwork = async (id: string) => {
-    const accepted = await feedback.confirmAction({
-        title: t('networksView.deleteTitle'),
-        message: t('networksView.deleteMessage'),
-        confirmText: t('common.delete'),
-        danger: true,
-        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
-    });
-    if (!accepted) return;
-    try {
-        await dockerApi.removeNetwork(id);
-        selectedIds.value = selectedIds.value.filter((x) => x !== id);
-        await fetchNetworks();
-        feedback.success(t('networksView.deletedSuccess'));
-    } catch (err) {
-        feedback.error(t('networksView.deleteFailed', { error: String(err) }));
-    }
-};
-
-const bulkDelete = async () => {
-    if (selectedIds.value.length === 0) return;
-    const removeCount = selectedIds.value.length;
-    const accepted = await feedback.confirmAction({
-        title: t('networksView.deleteManyTitle'),
-        message: t('networksView.deleteManyMessage', { count: removeCount }),
-        confirmText: t('common.delete'),
-        danger: true,
-        requireText: appSettings.safety.softDeleteRequireTyping ? 'DELETE' : undefined,
-    });
-    if (!accepted) return;
-    try {
-        for (const id of selectedIds.value) {
-            await dockerApi.removeNetwork(id);
-        }
-        selectedIds.value = [];
-        await fetchNetworks();
-        feedback.success(t('networksView.deletedManySuccess', { count: removeCount }));
-    } catch (err) {
-        feedback.error(t('networksView.bulkDeleteFailed', { error: String(err) }));
-    }
-};
-
-const pruneNetworks = async () => {
-    if (pruning.value) return;
-    const accepted = await feedback.confirmAction({
-        title: t('networksView.pruneTitle'),
-        message: t('networksView.pruneMessage'),
-        confirmText: t('common.prune'),
-        danger: true,
-        requireText: appSettings.safety.softDeleteRequireTyping ? 'PRUNE' : undefined,
-    });
-    if (!accepted) return;
-    try {
-        pruning.value = true;
-        const { data } = await dockerApi.pruneNetworks();
-        await fetchNetworks();
-        const deletedCount = Array.isArray(data?.NetworksDeleted) ? data.NetworksDeleted.length : 0;
-        feedback.success(t('networksView.prunedSuccess', { count: deletedCount }));
-    } catch (err) {
-        feedback.error(t('networksView.pruneFailed', { error: String(err) }));
-    } finally {
-        pruning.value = false;
-    }
-};
-
-const compareValues = (left: string | number, right: string | number) => {
-    if (typeof left === 'number' && typeof right === 'number') return left - right;
-    return String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: 'base' });
-};
-
-const getNetworkSortValue = (network: any) => {
-    if (sortKey.value === 'name') return network.Name || '';
-    if (sortKey.value === 'id') return network.Id.substring(0, 12);
-    if (sortKey.value === 'driver') return network.Driver || '';
-    if (sortKey.value === 'scope') return network.Scope || '';
-    return network.Internal ? 1 : 0;
-};
-
-const sortedNetworks = computed(() => {
-    const list = [...networks.value];
-    list.sort((a, b) => {
-        const result = compareValues(getNetworkSortValue(a), getNetworkSortValue(b));
-        return sortDirection.value === 'asc' ? result : -result;
-    });
-    return list;
-});
-
-const totalItems = computed(() => sortedNetworks.value.length);
-const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize.value)));
-const paginatedNetworks = computed(() => {
-    const start = (currentPage.value - 1) * pageSize.value;
-    return sortedNetworks.value.slice(start, start + pageSize.value);
-});
-const pageStart = computed(() => (totalItems.value === 0 ? 0 : (currentPage.value - 1) * pageSize.value + 1));
-const pageEnd = computed(() => Math.min(currentPage.value * pageSize.value, totalItems.value));
-
-const pageNetworkIds = computed(() => paginatedNetworks.value.map((n) => n.Id));
-const selectedCount = computed(() => selectedIds.value.length);
-const allPageSelected = computed(() => pageNetworkIds.value.length > 0 && pageNetworkIds.value.every((id) => selectedIds.value.includes(id)));
-
-const toggleSelect = (id: string) => {
-    if (selectedIds.value.includes(id)) selectedIds.value = selectedIds.value.filter((x) => x !== id);
-    else selectedIds.value = [...selectedIds.value, id];
-};
-
-const toggleSelectAllPage = () => {
-    if (allPageSelected.value) selectedIds.value = selectedIds.value.filter((id) => !pageNetworkIds.value.includes(id));
-    else selectedIds.value = Array.from(new Set([...selectedIds.value, ...pageNetworkIds.value]));
-};
-
-const toggleCardMenu = (id: string) => {
-    activeCardMenuId.value = activeCardMenuId.value === id ? null : id;
-};
-
-const closeCardMenu = () => {
-    activeCardMenuId.value = null;
-};
-
-const handleDocumentClick = (event: MouseEvent) => {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('.card-actions-menu')) return;
-    closeCardMenu();
-};
-
-const toggleSort = (key: 'name' | 'id' | 'driver' | 'scope' | 'internal') => {
-    if (sortKey.value === key) {
-        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
-        return;
-    }
-    sortKey.value = key;
-    sortDirection.value = 'asc';
-};
-
-const getSortIndicator = (key: 'name' | 'id' | 'driver' | 'scope' | 'internal') => {
-    if (sortKey.value !== key) return '↕';
-    return sortDirection.value === 'asc' ? '↑' : '↓';
-};
-
-watch(pageSize, () => {
-    currentPage.value = 1;
-    persistStoredValue(NETWORK_PAGE_SIZE_KEY, pageSize.value);
-});
-watch(viewMode, () => {
-    persistStoredValue(NETWORK_VIEW_MODE_KEY, viewMode.value);
-});
-watch(totalPages, (maxPage) => {
-    if (currentPage.value > maxPage) currentPage.value = maxPage;
-});
-watch(networks, (list) => {
-    const valid = new Set(list.map((n) => n.Id));
-    selectedIds.value = selectedIds.value.filter((id) => valid.has(id));
-});
-
-onMounted(() => {
-    fetchNetworks();
-    document.addEventListener('click', handleDocumentClick);
-});
-
-onUnmounted(() => {
-    document.removeEventListener('click', handleDocumentClick);
-});
+const {
+    t,
+    networks,
+    loading,
+    currentPage,
+    pageSize,
+    pageSizeOptions,
+    viewMode,
+    selectedIds,
+    pruning,
+    activeCardMenuId,
+    selectedCount,
+    totalItems,
+    totalPages,
+    paginatedNetworks,
+    pageStart,
+    pageEnd,
+    allPageSelected,
+    fetchNetworks,
+    removeNetwork,
+    bulkDelete,
+    pruneNetworks,
+    toggleSelect,
+    toggleSelectAllPage,
+    toggleCardMenu,
+    toggleSort,
+    getSortIndicator,
+} = useNetworkList();
 </script>
 
 <template>
@@ -238,11 +73,11 @@ onUnmounted(() => {
                 <thead>
                     <tr>
                         <th class="check-col"><input class="bulk-checkbox" type="checkbox" :checked="allPageSelected" @change="toggleSelectAllPage" /></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('name')">{{ t('networksView.name') }}<span class="sort-indicator">{{ getSortIndicator('name') }}</span></button></th>
+                        <th class="name-cell"><button class="sort-header" type="button" @click="toggleSort('name')">{{ t('networksView.name') }}<span class="sort-indicator">{{ getSortIndicator('name') }}</span></button></th>
                         <th><button class="sort-header" type="button" @click="toggleSort('id')">ID<span class="sort-indicator">{{ getSortIndicator('id') }}</span></button></th>
                         <th><button class="sort-header" type="button" @click="toggleSort('driver')">{{ t('networksView.driver') }}<span class="sort-indicator">{{ getSortIndicator('driver') }}</span></button></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('scope')">{{ t('networksView.scope') }}<span class="sort-indicator">{{ getSortIndicator('scope') }}</span></button></th>
-                        <th><button class="sort-header" type="button" @click="toggleSort('internal')">{{ t('networksView.internal') }}<span class="sort-indicator">{{ getSortIndicator('internal') }}</span></button></th>
+                        <th class="scope-cell"><button class="sort-header" type="button" @click="toggleSort('scope')">{{ t('networksView.scope') }}<span class="sort-indicator">{{ getSortIndicator('scope') }}</span></button></th>
+                        <th class="internal-cell"><button class="sort-header" type="button" @click="toggleSort('internal')">{{ t('networksView.internal') }}<span class="sort-indicator">{{ getSortIndicator('internal') }}</span></button></th>
                         <th class="actions-cell">{{ t('common.actions') }}</th>
                     </tr>
                 </thead>
@@ -252,8 +87,8 @@ onUnmounted(() => {
                         <td class="name-cell">{{ net.Name }}</td>
                         <td><code>{{ net.Id.substring(0, 12) }}</code></td>
                         <td>{{ net.Driver }}</td>
-                        <td>{{ net.Scope }}</td>
-                        <td>{{ net.Internal ? t('common.yes') : t('common.no') }}</td>
+                        <td class="scope-cell">{{ net.Scope }}</td>
+                        <td class="internal-cell">{{ net.Internal ? t('common.yes') : t('common.no') }}</td>
                         <td class="actions-cell">
                             <div class="action-group">
                                 <button class="action-btn action-danger" :title="t('common.remove')" @click="removeNetwork(net.Id)">
@@ -324,9 +159,13 @@ onUnmounted(() => {
                 <span>{{ pageStart }}-{{ pageEnd }} / {{ totalItems }}</span>
             </div>
             <div class="pager-actions">
-                <button class="btn btn-ghost" :disabled="currentPage === 1" @click="currentPage--">{{ t('common.prev') }}</button>
+                <button class="btn btn-ghost btn-icon" :disabled="currentPage === 1" :aria-label="t('common.prev')" :title="t('common.prev')" @click="currentPage--">
+                    <ChevronLeft :size="16" />
+                </button>
                 <span class="pager-page">{{ t('common.page') }} {{ currentPage }} / {{ totalPages }}</span>
-                <button class="btn btn-ghost" :disabled="currentPage >= totalPages" @click="currentPage++">{{ t('common.next') }}</button>
+                <button class="btn btn-ghost btn-icon" :disabled="currentPage >= totalPages" :aria-label="t('common.next')" :title="t('common.next')" @click="currentPage++">
+                    <ChevronRight :size="16" />
+                </button>
             </div>
         </div>
     </div>
@@ -355,8 +194,8 @@ onUnmounted(() => {
 .card-meta-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .card-meta-label { font-size: 0.76rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
 .docker-table { width: 100%; border-collapse: collapse; }
-.docker-table th { text-align: left; padding: 14px 20px; font-size: 0.86rem; color: var(--text-muted); border-bottom: 1px solid var(--glass-border); }
-.docker-table td { padding: 14px 20px; font-size: 0.88rem; border-bottom: 1px solid var(--glass-border); }
+.docker-table th { text-align: left; padding: 14px 20px; font-size: 0.86rem; color: var(--text-muted); border-bottom: 1px solid var(--glass-border); vertical-align: middle; }
+.docker-table td { padding: 14px 20px; font-size: 0.88rem; border-bottom: 1px solid var(--glass-border); vertical-align: middle; }
 .sort-header { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .sort-indicator { font-size: 0.8em; color: var(--text-muted); }
 .check-col { width: 56px; text-align: center !important; padding: 10px !important; }
@@ -366,6 +205,10 @@ onUnmounted(() => {
 .docker-table tr:last-child td { border-bottom: none; }
 .docker-table tr:hover { background: var(--glass); }
 .name-cell { font-weight: 600; }
+.scope-cell,
+.internal-cell { text-align: center; }
+th.scope-cell .sort-header,
+th.internal-cell .sort-header { justify-content: center; width: 100%; }
 .actions-cell { width: 100px; text-align: center; }
 .action-group { display: flex; align-items: center; justify-content: center; }
 .card-actions-menu { position: absolute; top: 18px; right: 18px; }

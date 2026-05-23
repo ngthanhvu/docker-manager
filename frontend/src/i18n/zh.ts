@@ -18,6 +18,7 @@ const zh = {
     memory: '内存',
     dashboardSubtitle: '实时查看系统状态、资源和 Docker 吞吐。',
     logout: '退出登录',
+    toggleSidebar: '切换侧边栏',
   },
   auth: {
     secureAccess: '安全访问',

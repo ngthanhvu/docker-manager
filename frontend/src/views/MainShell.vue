@@ -15,6 +15,8 @@ import {
   Moon,
   Sun,
   ChevronDown,
+  Menu,
+  X,
 } from 'lucide-vue-next';
 import { dockerApi } from '../api';
 import { appSettings } from '../ui/settings';
@@ -33,6 +35,7 @@ const router = useRouter();
 const systemInfo = ref<any>(null);
 const resourceCounts = ref<{ volumes: number; networks: number }>({ volumes: 0, networks: 0 });
 const languageMenuOpen = ref(false);
+const sidebarOpen = ref(false);
 let statsTimer: number | null = null;
 
 const tabs = [
@@ -79,6 +82,17 @@ const setActiveTab = async (tabId: string) => {
   if (!validTabIds.has(tabId)) return;
   persistStoredValue('dock-manager.active-tab', tabId);
   await router.replace({ name: 'app', params: { tab: tabId } });
+};
+
+const handleTabClick = async (tabId: string) => {
+  await setActiveTab(tabId);
+  if (window.matchMedia('(max-width: 1023px)').matches) {
+    sidebarOpen.value = false;
+  }
+};
+
+const toggleSidebar = () => {
+  sidebarOpen.value = !sidebarOpen.value;
 };
 
 const handleGlobalShortcut = (event: KeyboardEvent) => {
@@ -140,6 +154,7 @@ const setupStatsInterval = () => {
 };
 
 onMounted(async () => {
+  sidebarOpen.value = window.matchMedia('(min-width: 1024px)').matches;
   if (!validTabIds.has(activeTab.value)) {
     await setActiveTab('dashboard');
     return;
@@ -161,29 +176,36 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 
 <template>
   <div class="flex min-h-screen bg-transparent">
-    <aside class="hidden w-73 shrink-0 p-4 lg:block">
-      <div class="glass-panel flex h-[calc(100vh-2rem)] flex-col overflow-hidden">
-        <div class="border-b px-6 py-6" style="border-color: var(--glass-border);">
-          <div class="mb-2 flex items-center gap-3">
-            <div class="grid h-12 w-12 place-items-center border text-2xl"
+    <div v-if="sidebarOpen" class="fixed inset-0 z-30 bg-black/55 lg:hidden" aria-hidden="true" @click="sidebarOpen = false">
+    </div>
+
+    <aside class="fixed inset-y-0 left-0 z-40 w-[min(18rem,calc(100vw-2rem))] overflow-hidden p-3 transition-all duration-200 ease-out sm:p-4 lg:sticky lg:top-0 lg:z-10 lg:h-screen lg:shrink-0"
+      :class="sidebarOpen ? 'translate-x-0 lg:w-73 lg:p-4' : '-translate-x-full lg:w-0 lg:translate-x-0 lg:p-0'">
+      <div class="glass-panel flex h-full flex-col overflow-hidden lg:h-[calc(100vh-2rem)]">
+        <div class="flex border-b px-4 py-4 sm:px-5 lg:h-[77px] lg:items-center lg:py-0" style="border-color: var(--glass-border);">
+          <div class="flex items-center gap-3">
+            <div class="grid h-10 w-10 shrink-0 place-items-center border text-xl"
               style="border-color: var(--primary); background: rgba(29, 78, 216, 0.12); color: var(--primary);">
               <i class="fa-brands fa-docker" aria-hidden="true"></i>
             </div>
-            <div>
-              <p class="text-[11px] uppercase tracking-[0.24em]" style="color: var(--text-muted);">{{ t('nav.opsPanel')
+            <div class="min-w-0 flex-1">
+              <p class="text-[10px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{ t('nav.opsPanel')
               }}</p>
-              <div class="text-xl font-bold tracking-tight">Dock Manager</div>
+              <div class="truncate text-lg font-bold tracking-tight">Dock Manager</div>
             </div>
+            <button class="btn btn-icon h-9 w-9 shrink-0 lg:hidden" type="button" :aria-label="t('common.close')" @click="sidebarOpen = false">
+              <X :size="17" />
+            </button>
           </div>
         </div>
 
-        <nav class="flex flex-1 flex-col gap-2 p-4">
+        <nav class="flex flex-1 flex-col gap-2 p-3 sm:p-4">
           <button v-for="(tab, index) in tabs" :key="tab.id"
             class="cursor-pointer flex items-center justify-between border px-4 py-3 text-left text-sm font-semibold transition"
             :class="activeTab === tab.id ? 'shadow-[4px_4px_0_rgba(0,0,0,0.28)]' : ''" :style="activeTab === tab.id
               ? 'border-color: var(--primary); background: var(--primary); color: white;'
               : 'border-color: var(--glass-border); background: var(--glass); color: var(--text-muted);'"
-            @click="setActiveTab(tab.id)">
+            @click="handleTabClick(tab.id)">
             <span class="flex items-center gap-3">
               <component :is="tab.icon" :size="18" />
               {{ t(tab.nameKey) }}
@@ -192,7 +214,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
           </button>
         </nav>
 
-        <div class="mt-auto border-t px-6 py-5 text-sm" style="border-color: var(--glass-border);">
+        <div class="mt-auto border-t px-4 py-4 text-sm sm:px-5" style="border-color: var(--glass-border);">
           <div v-if="systemInfo && appSettings.ui.showSidebarStats" class="mb-4 grid gap-2">
             <div class="flex items-center justify-between border px-3 py-2" style="border-color: var(--glass-border);">
               <span class="flex items-center gap-2" style="color: var(--text-muted);">
@@ -216,23 +238,29 @@ watch(() => appSettings.general.autoRefreshMs, () => {
       </div>
     </aside>
 
-    <main class="min-w-0 flex-1 p-4 pl-4 lg:pl-0">
-      <div class="glass-panel flex h-[calc(100dvh-2rem)] min-w-0 flex-col overflow-hidden">
-        <header class="border-b px-5 py-5 sm:px-8"
+    <main class="min-w-0 flex-1 p-2 sm:p-4 lg:pl-0">
+      <div class="glass-panel flex h-[calc(100dvh-1rem)] min-w-0 flex-col overflow-hidden sm:h-[calc(100dvh-2rem)]">
+        <header class="flex border-b px-4 py-3 sm:px-6 sm:py-4 lg:h-[77px] lg:items-center lg:py-0"
           style="border-color: var(--glass-border); background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);">
-          <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-            <div>
-              <p class="mb-2 text-[11px] uppercase tracking-[0.24em]" style="color: var(--text-muted);">
-                {{ activeTabMeta ? t(activeTabMeta.nameKey) : '' }}
-              </p>
-              <h1 class="text-3xl font-bold tracking-tight sm:text-4xl">{{ activeTabMeta ? t(activeTabMeta.nameKey) : ''
-              }}</h1>
+          <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div class="flex min-w-0 items-center gap-3">
+              <button class="btn btn-icon shrink-0" type="button" :aria-expanded="sidebarOpen" :aria-label="t('nav.toggleSidebar')"
+                @click="toggleSidebar">
+                <Menu :size="18" />
+              </button>
+              <div class="min-w-0">
+                <p class="mb-1 text-[10px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">
+                  {{ activeTabMeta ? t(activeTabMeta.nameKey) : '' }}
+                </p>
+                <h1 class="truncate text-xl font-bold tracking-tight sm:text-2xl">{{ activeTabMeta ? t(activeTabMeta.nameKey) : ''
+                }}</h1>
+              </div>
             </div>
 
-            <div class="flex flex-wrap items-center justify-end gap-3">
+            <div class="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
               <div class="relative">
                 <button
-                  class="inline-flex h-10 items-center justify-between gap-3 border px-3 text-sm font-semibold transition cursor-pointer"
+                  class="inline-flex h-9 items-center justify-between gap-2 border px-3 text-sm font-semibold transition cursor-pointer"
                   type="button" :aria-label="t(languageLabelKeys[activeLanguage.value])"
                   :aria-expanded="languageMenuOpen"
                   style="border-color: var(--glass-border); background: var(--glass); color: var(--text-main);"
@@ -258,13 +286,13 @@ watch(() => appSettings.general.autoRefreshMs, () => {
 
               <div class="inline-flex items-center border p-1"
                 style="border-color: var(--glass-border); background: var(--glass);">
-                <button class="grid h-8 w-10 place-items-center transition cursor-pointer" type="button"
+                <button class="grid h-7 w-9 place-items-center transition cursor-pointer" type="button"
                   :title="t('settings.dark')" :aria-label="t('settings.dark')" :style="appSettings.ui.theme === 'dark'
                     ? 'background: var(--primary); color: white;'
                     : 'background: transparent; color: var(--text-main);'" @click="appSettings.ui.theme = 'dark'">
                   <Moon :size="17" />
                 </button>
-                <button class="grid h-8 w-10 place-items-center transition cursor-pointer" type="button"
+                <button class="grid h-7 w-9 place-items-center transition cursor-pointer" type="button"
                   :title="t('settings.light')" :aria-label="t('settings.light')" :style="appSettings.ui.theme === 'light'
                     ? 'background: var(--primary); color: white;'
                     : 'background: transparent; color: var(--text-main);'" @click="appSettings.ui.theme = 'light'">
@@ -272,27 +300,16 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 </button>
               </div>
 
-              <div v-if="systemInfo" class="flex items-center gap-3 border px-4 py-2 text-sm"
+              <div v-if="systemInfo" class="flex min-w-0 items-center gap-2 border px-3 py-1.5 text-sm sm:px-4"
                 style="border-color: var(--glass-border); background: var(--glass);">
                 <span class="h-2.5 w-2.5 animate-pulse" style="background: var(--success);"></span>
-                Docker {{ systemInfo.ServerVersion }}
+                <span class="truncate">Docker {{ systemInfo.ServerVersion }}</span>
               </div>
             </div>
           </div>
         </header>
 
-        <div class="border-b px-5 py-3 lg:hidden" style="border-color: var(--glass-border);">
-          <div class="flex gap-2 overflow-x-auto">
-            <button v-for="tab in tabs" :key="tab.id" class="shrink-0 border px-3 py-2 text-sm font-semibold" :style="activeTab === tab.id
-              ? 'border-color: var(--primary); background: var(--primary); color: white;'
-              : 'border-color: var(--glass-border); background: var(--glass); color: var(--text-muted);'"
-              @click="setActiveTab(tab.id)">
-              {{ t(tab.nameKey) }}
-            </button>
-          </div>
-        </div>
-
-        <section class="animate-fade-in min-h-0 flex-1 overflow-auto px-5 py-5 sm:px-8 sm:py-6">
+        <section class="animate-fade-in min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-8 sm:py-6">
           <Dashboard v-if="activeTab === 'dashboard'" :system-info="systemInfo" :resource-counts="resourceCounts" />
           <ContainerList v-else-if="activeTab === 'containers'" />
           <ImageList v-else-if="activeTab === 'images'" />
