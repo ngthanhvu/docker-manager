@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { useI18n } from '../i18n';
 import {
     Play,
     Square,
@@ -1041,7 +1041,7 @@ watch(
 
 .docker-table th {
     padding: 16px 24px;
-    font-family: 'Outfit', sans-serif;
+    font-family: inherit;
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-muted);
@@ -1267,7 +1267,8 @@ th.time-cell .sort-header {
 }
 
 .card-action-item:hover {
-    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--glass-border));
+    background: color-mix(in srgb, var(--primary) 8%, var(--glass));
 }
 
 .card-action-item:disabled {
@@ -1346,7 +1347,7 @@ th.time-cell .sort-header {
 }
 
 .action-btn:hover {
-    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--glass-border));
     color: var(--text-main);
 }
 

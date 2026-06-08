@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { useI18n } from '../i18n';
 import { appSettings } from '../ui/settings';
 import { updates } from '../ui/updates';
 import { feedback } from '../ui/feedback';
@@ -13,23 +13,12 @@ const props = defineProps<{
 const { t } = useI18n();
 
 const apiHint = computed(() => `${appSettings.runtime.apiBaseUrl.replace(/\/+$/, '')}/api`);
-const languageLabelKey = computed(() => {
-  switch (appSettings.general.language) {
-    case 'vi':
-      return 'settings.vietnamese';
-    case 'zh':
-      return 'settings.chinese';
-    default:
-      return 'settings.english';
-  }
-});
 const formatVersion = (version?: string | null) => {
   const value = String(version || '').trim();
   if (!value) return t('common.notAvailable');
   return value.toLowerCase().startsWith('v') ? value : `v${value}`;
 };
 const summaryCards = computed(() => [
-  { label: t('settings.activeLanguage'), value: t(languageLabelKey.value) },
   { label: t('settings.appVersion'), value: formatVersion(appSettings.about.appVersion) },
   { label: t('settings.buildDate'), value: appSettings.about.buildDate },
 ]);
@@ -135,16 +124,16 @@ const applyUpdate = async () => {
     <section>
       <div class="glass-panel p-6">
         <p class="section-heading">{{ t('settings.title') }}</p>
-        <h2 class="max-w-3xl text-3xl font-bold tracking-tight">{{ t('settings.title') }}</h2>
+        <h2 class="max-w-3xl text-3xl font-semibold tracking-tight">{{ t('settings.title') }}</h2>
         <p class="mt-3 max-w-2xl text-sm leading-7" style="color: var(--text-muted);">
           {{ t('settings.subtitle') }}
         </p>
 
-        <div class="mt-6 grid gap-3 sm:grid-cols-3">
+        <div class="mt-6 grid gap-3 sm:grid-cols-2">
           <div v-for="card in summaryCards" :key="card.label" class="border p-4"
             style="border-color: var(--glass-border); background: var(--glass);">
-            <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{ card.label }}</p>
-            <p class="mt-2 text-2xl font-bold">{{ card.value }}</p>
+            <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{ card.label }}</p>
+            <p class="mt-2 text-2xl font-semibold">{{ card.value }}</p>
           </div>
         </div>
       </div>
@@ -299,22 +288,22 @@ const applyUpdate = async () => {
           <div class="border p-4 lg:col-span-2" style="border-color: var(--glass-border); background: var(--glass);">
             <div class="grid gap-3 sm:grid-cols-2">
               <div>
-                <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{
+                <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
                   t('settings.currentVersion') }}</p>
-                <p class="mt-2 text-xl font-bold">{{ formatVersion(updateState.currentVersion) }}</p>
+                <p class="mt-2 text-xl font-semibold">{{ formatVersion(updateState.currentVersion) }}</p>
               </div>
               <div>
-                <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{
+                <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
                   t('settings.latestVersion') }}</p>
-                <p class="mt-2 text-xl font-bold">{{ formatVersion(updateState.latestVersion) }}</p>
+                <p class="mt-2 text-xl font-semibold">{{ formatVersion(updateState.latestVersion) }}</p>
               </div>
               <div>
-                <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{
+                <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
                   t('settings.lastChecked') }}</p>
                 <p class="mt-2 text-sm font-medium">{{ checkedAtLabel }}</p>
               </div>
               <div>
-                <p class="text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{
+                <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
                   t('settings.latestPublished') }}</p>
                 <p class="mt-2 text-sm font-medium">{{ releaseDateLabel }}</p>
               </div>

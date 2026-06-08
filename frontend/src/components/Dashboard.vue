@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { useI18n } from '../i18n';
 import {
   Container,
   Box,
@@ -269,7 +269,7 @@ const chartTheme = computed(() => {
       zoomHandle: '#1d4ed8',
       zoomHandleMove: 'rgba(29, 78, 216, 0.74)',
       pointBorder: '#f7f3ea',
-      shadow: '6px 6px 0 rgba(22, 22, 22, 0.14)',
+      shadow: '0 12px 32px rgba(17, 24, 39, 0.14)',
     };
   }
 
@@ -293,7 +293,7 @@ const chartTheme = computed(() => {
     zoomHandle: '#f4f4f0',
     zoomHandleMove: 'rgba(255, 255, 255, 0.8)',
     pointBorder: '#f8fafc',
-    shadow: '6px 6px 0 rgba(0,0,0,0.28)',
+    shadow: '0 12px 32px rgba(0,0,0,0.28)',
   };
 });
 
@@ -304,7 +304,7 @@ const monitoringChartOption = computed(() => ({
   backgroundColor: 'transparent',
   textStyle: {
     color: chartTheme.value.text,
-    fontFamily: 'Space Grotesk, sans-serif',
+    fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
   },
   grid: {
     left: 58,
@@ -321,7 +321,7 @@ const monitoringChartOption = computed(() => ({
     textStyle: {
       color: chartTheme.value.tooltipText,
     },
-    extraCssText: `border-radius:0; box-shadow: ${chartTheme.value.shadow};`,
+    extraCssText: `border-radius:8px; box-shadow: ${chartTheme.value.shadow};`,
     axisPointer: {
       type: 'line',
       lineStyle: {
@@ -551,11 +551,11 @@ watch(activeNetworkInterfaces, (interfaces) => {
       ]" :key="card.key" class="glass-panel p-5">
         <div class="mb-6 flex items-start justify-between gap-4">
           <div>
-            <p class="mb-2 text-[11px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{ card.label }}
+            <p class="mb-2 text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{ card.label }}
             </p>
-            <div class="text-3xl font-bold tracking-tight">{{ card.value }}</div>
+            <div class="text-3xl font-semibold tracking-tight">{{ card.value }}</div>
           </div>
-          <div class="grid h-11 w-11 place-items-center border"
+          <div class="grid h-11 w-11 place-items-center rounded-lg border"
             :style="{ borderColor: card.tone, color: card.tone, background: 'color-mix(in srgb, ' + card.tone + ' 12%, transparent)' }">
             <component :is="card.icon" :size="18" />
           </div>
@@ -570,12 +570,12 @@ watch(activeNetworkInterfaces, (interfaces) => {
       <section class="glass-panel p-5">
         <p class="section-heading">{{ t('dashboard.statusRings') }}</p>
         <div class="grid gap-5 md:grid-cols-3 2xl:grid-cols-1">
-          <div v-for="g in gauges" :key="g.key" class="border p-4 text-center"
+          <div v-for="g in gauges" :key="g.key" class="rounded-lg border p-4 text-center"
             style="border-color: var(--glass-border); background: var(--glass);">
             <div class="mx-auto grid h-32 w-32 place-items-center rounded-full border-10"
               :style="{ borderColor: 'rgba(255,255,255,0.08)', borderTopColor: 'var(--primary)', borderRightColor: g.key === 'memory' ? 'var(--warning)' : 'var(--primary)' }">
               <div class="text-center">
-                <div class="text-3xl font-bold leading-none">
+                <div class="text-3xl font-semibold leading-none">
                   {{ g.value }}<span class="text-base" style="color: var(--text-muted);">{{ g.unit }}</span>
                 </div>
                 <div class="mt-2 text-sm font-semibold">{{ g.label }}</div>
@@ -600,19 +600,19 @@ watch(activeNetworkInterfaces, (interfaces) => {
 
           <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <div class="inline-flex border" style="border-color: var(--glass-border);">
-              <button class="px-4 py-2 text-sm font-semibold"
-                :style="monitorMode === 'network' ? 'background: var(--primary); color: white;' : 'background: var(--glass); color: var(--text-muted);'"
+              <button class="px-4 py-2 text-sm font-medium"
+                :style="monitorMode === 'network' ? 'background: var(--primary); color: white; border-radius: 5px;' : 'background: var(--glass); color: var(--text-muted);'"
                 @click="monitorMode = 'network'">
                 {{ t('dashboard.network') }}
               </button>
-              <button class="px-4 py-2 text-sm font-semibold"
-                :style="monitorMode === 'disk' ? 'background: var(--primary); color: white;' : 'background: var(--glass); color: var(--text-muted);'"
+              <button class="px-4 py-2 text-sm font-medium"
+                :style="monitorMode === 'disk' ? 'background: var(--primary); color: white; border-radius: 5px;' : 'background: var(--glass); color: var(--text-muted);'"
                 @click="monitorMode = 'disk'">
                 {{ t('dashboard.disk') }}
               </button>
             </div>
 
-            <label v-if="monitorMode === 'network'" class="relative flex min-w-47.5 items-center border pr-10"
+            <label v-if="monitorMode === 'network'" class="relative flex min-w-47.5 items-center rounded-md border pr-10"
               style="border-color: var(--glass-border); background: var(--glass);">
               <span class="px-3 text-xs uppercase tracking-[0.2em]" style="color: var(--text-muted);">{{
                 t('dashboard.iface') }}</span>
@@ -628,7 +628,7 @@ watch(activeNetworkInterfaces, (interfaces) => {
         </div>
 
         <div class="mb-4 flex flex-wrap gap-2">
-          <div v-for="pill in monitoringPills" :key="pill.label" class="border px-3 py-2 text-sm"
+          <div v-for="pill in monitoringPills" :key="pill.label" class="rounded-md border px-3 py-2 text-sm"
             style="border-color: var(--glass-border); background: var(--glass);">
             <span style="color: var(--text-muted);">{{ pill.label }}:</span>
             <strong class="ml-2">{{ pill.value }}</strong>
@@ -637,7 +637,7 @@ watch(activeNetworkInterfaces, (interfaces) => {
 
         <div class="mb-3 flex flex-wrap gap-4 text-sm" style="color: var(--text-muted);">
           <span v-for="item in monitoringLegend" :key="item.label" class="inline-flex items-center gap-2">
-            <span class="h-2.5 w-2.5" :style="{ background: item.color }"></span>
+            <span class="h-2.5 w-2.5 rounded-full" :style="{ background: item.color }"></span>
             {{ item.label }}
           </span>
         </div>

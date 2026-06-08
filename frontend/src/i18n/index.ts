@@ -1,26 +1,24 @@
-import { watch } from 'vue';
-import { createI18n } from 'vue-i18n';
-import { appSettings } from '../ui/settings';
-import vi from './vi';
 import en from './en';
-import zh from './zh';
 
-export const i18n = createI18n({
-  legacy: false,
-  locale: appSettings.general.language,
-  fallbackLocale: 'en',
-  messages: {
-    vi,
-    en,
-    zh,
-  },
-});
+type MessageTree = Record<string, unknown>;
+type TranslateParams = Record<string, string | number | boolean | null | undefined>;
 
-watch(
-  () => appSettings.general.language,
-  (language) => {
-    i18n.global.locale.value = language;
-    document.documentElement.lang = language;
+const getMessage = (key: string) => {
+  const value = key.split('.').reduce<unknown>((current, part) => {
+    if (!current || typeof current !== 'object') return undefined;
+    return (current as MessageTree)[part];
+  }, en);
+
+  return typeof value === 'string' ? value : key;
+};
+
+export const t = (key: string, params: TranslateParams = {}) =>
+  getMessage(key).replace(/\{(\w+)\}/g, (_, name: string) => String(params[name] ?? `{${name}}`));
+
+export const useI18n = () => ({ t });
+
+export const i18n = {
+  global: {
+    t,
   },
-  { immediate: true }
-);
+};

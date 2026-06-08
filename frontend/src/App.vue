@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { useI18n } from './i18n';
 import { feedback } from './ui/feedback';
 import { appSettings } from './ui/settings';
 import { updates } from './ui/updates';

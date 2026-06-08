@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { useI18n } from 'vue-i18n';
+import { useI18n } from '../i18n';
 import {
   LayoutDashboard,
   Container,
@@ -14,7 +14,6 @@ import {
   Settings,
   Moon,
   Sun,
-  ChevronDown,
   Menu,
   X,
 } from 'lucide-vue-next';
@@ -34,7 +33,6 @@ const route = useRoute();
 const router = useRouter();
 const systemInfo = ref<any>(null);
 const resourceCounts = ref<{ volumes: number; networks: number }>({ volumes: 0, networks: 0 });
-const languageMenuOpen = ref(false);
 const sidebarOpen = ref(false);
 let statsTimer: number | null = null;
 
@@ -56,27 +54,6 @@ const activeTab = computed(() => {
 });
 
 const activeTabMeta = computed(() => tabs.find((tab) => tab.id === activeTab.value) ?? tabs[0]);
-
-const languages = [
-  { value: 'vi', flagClass: 'fi fi-vn' },
-  { value: 'en', flagClass: 'fi fi-sh' },
-  { value: 'zh', flagClass: 'fi fi-cn' },
-] as const;
-
-const activeLanguage = computed(() =>
-  languages.find((language) => language.value === appSettings.general.language) ?? languages[1]
-);
-
-const languageLabelKeys: Record<typeof languages[number]['value'], string> = {
-  vi: 'settings.vietnamese',
-  en: 'settings.english',
-  zh: 'settings.chinese',
-};
-
-const setLanguage = (language: typeof languages[number]['value']) => {
-  appSettings.general.language = language;
-  languageMenuOpen.value = false;
-};
 
 const setActiveTab = async (tabId: string) => {
   if (!validTabIds.has(tabId)) return;
@@ -180,18 +157,19 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     </div>
 
     <aside class="fixed inset-y-0 left-0 z-40 w-[min(18rem,calc(100vw-2rem))] overflow-hidden p-3 transition-all duration-200 ease-out sm:p-4 lg:sticky lg:top-0 lg:z-10 lg:h-screen lg:shrink-0"
-      :class="sidebarOpen ? 'translate-x-0 lg:w-73 lg:p-4' : '-translate-x-full lg:w-0 lg:translate-x-0 lg:p-0'">
+      :class="sidebarOpen ? 'translate-x-0 lg:w-73 lg:p-4' : '-translate-x-full lg:w-28 lg:translate-x-0 lg:p-4'">
       <div class="glass-panel flex h-full flex-col overflow-hidden lg:h-[calc(100vh-2rem)]">
-        <div class="flex border-b px-4 py-4 sm:px-5 lg:h-[77px] lg:items-center lg:py-0" style="border-color: var(--glass-border);">
-          <div class="flex items-center gap-3">
-            <div class="grid h-10 w-10 shrink-0 place-items-center border text-xl"
+        <div class="flex border-b px-4 py-4 sm:px-5 lg:h-[77px] lg:items-center lg:py-0"
+          :class="sidebarOpen ? '' : 'lg:justify-center lg:px-0'" style="border-color: var(--glass-border);">
+          <div class="flex items-center gap-3" :class="sidebarOpen ? '' : 'lg:w-full lg:justify-center'">
+            <div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg border text-xl"
               style="border-color: var(--primary); background: rgba(29, 78, 216, 0.12); color: var(--primary);">
               <i class="fa-brands fa-docker" aria-hidden="true"></i>
             </div>
-            <div class="min-w-0 flex-1">
-              <p class="text-[10px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">{{ t('nav.opsPanel')
+            <div class="min-w-0 flex-1" :class="sidebarOpen ? '' : 'lg:hidden'">
+              <p class="text-[10px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{ t('nav.opsPanel')
               }}</p>
-              <div class="truncate text-lg font-bold tracking-tight">Dock Manager</div>
+              <div class="truncate text-lg font-semibold tracking-tight">Dock Manager</div>
             </div>
             <button class="btn btn-icon h-9 w-9 shrink-0 lg:hidden" type="button" :aria-label="t('common.close')" @click="sidebarOpen = false">
               <X :size="17" />
@@ -199,31 +177,36 @@ watch(() => appSettings.general.autoRefreshMs, () => {
           </div>
         </div>
 
-        <nav class="flex flex-1 flex-col gap-2 p-3 sm:p-4">
+        <nav class="flex flex-1 flex-col gap-2 p-3 sm:p-4"
+          :class="sidebarOpen ? '' : 'lg:items-center lg:p-2'">
           <button v-for="(tab, index) in tabs" :key="tab.id"
-            class="cursor-pointer flex items-center justify-between border px-4 py-3 text-left text-sm font-semibold transition"
-            :class="activeTab === tab.id ? 'shadow-[4px_4px_0_rgba(0,0,0,0.28)]' : ''" :style="activeTab === tab.id
-              ? 'border-color: var(--primary); background: var(--primary); color: white;'
+            class="cursor-pointer flex items-center justify-between rounded-md border px-3 py-2.5 text-left text-sm font-medium transition"
+            :class="sidebarOpen ? '' : 'lg:h-11 lg:w-11 lg:justify-center lg:px-0 lg:py-0'"
+            :title="sidebarOpen ? undefined : t(tab.nameKey)"
+            :style="activeTab === tab.id
+              ? 'border-color: color-mix(in srgb, var(--primary) 22%, var(--glass-border)); background: color-mix(in srgb, var(--primary) 16%, var(--glass)); color: var(--text-main);'
               : 'border-color: var(--glass-border); background: var(--glass); color: var(--text-muted);'"
             @click="handleTabClick(tab.id)">
-            <span class="flex items-center gap-3">
+            <span class="flex items-center gap-3" :class="sidebarOpen ? '' : 'lg:justify-center'">
               <component :is="tab.icon" :size="18" />
-              {{ t(tab.nameKey) }}
+              <span :class="sidebarOpen ? '' : 'lg:hidden'">{{ t(tab.nameKey) }}</span>
             </span>
-            <span class="font-mono text-[11px]">ALT+{{ index + 1 }}</span>
+            <span class="font-mono text-[11px]" :class="sidebarOpen ? '' : 'lg:hidden'"
+              style="color: var(--text-muted);">ALT+{{ index + 1 }}</span>
           </button>
         </nav>
 
-        <div class="mt-auto border-t px-4 py-4 text-sm sm:px-5" style="border-color: var(--glass-border);">
+        <div class="mt-auto border-t px-4 py-4 text-sm sm:px-5" :class="sidebarOpen ? '' : 'lg:hidden'"
+          style="border-color: var(--glass-border);">
           <div v-if="systemInfo && appSettings.ui.showSidebarStats" class="mb-4 grid gap-2">
-            <div class="flex items-center justify-between border px-3 py-2" style="border-color: var(--glass-border);">
+            <div class="flex items-center justify-between rounded-md border px-3 py-2" style="border-color: var(--glass-border);">
               <span class="flex items-center gap-2" style="color: var(--text-muted);">
                 <Cpu :size="15" />
                 {{ t('nav.cpu') }}
               </span>
               <strong>{{ systemInfo.NCPU }}</strong>
             </div>
-            <div class="flex items-center justify-between border px-3 py-2" style="border-color: var(--glass-border);">
+            <div class="flex items-center justify-between rounded-md border px-3 py-2" style="border-color: var(--glass-border);">
               <span class="flex items-center gap-2" style="color: var(--text-muted);">
                 <Database :size="15" />
                 {{ t('nav.memory') }}
@@ -241,7 +224,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     <main class="min-w-0 flex-1 p-2 sm:p-4 lg:pl-0">
       <div class="glass-panel flex h-[calc(100dvh-1rem)] min-w-0 flex-col overflow-hidden sm:h-[calc(100dvh-2rem)]">
         <header class="flex border-b px-4 py-3 sm:px-6 sm:py-4 lg:h-[77px] lg:items-center lg:py-0"
-          style="border-color: var(--glass-border); background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent);">
+          style="border-color: var(--glass-border); background: var(--bg-card);">
           <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div class="flex min-w-0 items-center gap-3">
               <button class="btn btn-icon shrink-0" type="button" :aria-expanded="sidebarOpen" :aria-label="t('nav.toggleSidebar')"
@@ -249,60 +232,31 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 <Menu :size="18" />
               </button>
               <div class="min-w-0">
-                <p class="mb-1 text-[10px] uppercase tracking-[0.22em]" style="color: var(--text-muted);">
-                  {{ activeTabMeta ? t(activeTabMeta.nameKey) : '' }}
-                </p>
-                <h1 class="truncate text-xl font-bold tracking-tight sm:text-2xl">{{ activeTabMeta ? t(activeTabMeta.nameKey) : ''
+                <h1 class="truncate text-xl font-semibold tracking-tight sm:text-2xl">{{ activeTabMeta ? t(activeTabMeta.nameKey) : ''
                 }}</h1>
               </div>
             </div>
 
             <div class="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
-              <div class="relative">
-                <button
-                  class="inline-flex h-9 items-center justify-between gap-2 border px-3 text-sm font-semibold transition cursor-pointer"
-                  type="button" :aria-label="t(languageLabelKeys[activeLanguage.value])"
-                  :aria-expanded="languageMenuOpen"
-                  style="border-color: var(--glass-border); background: var(--glass); color: var(--text-main);"
-                  @click="languageMenuOpen = !languageMenuOpen">
-                  <span class="inline-flex items-center gap-2">
-                    <span :class="activeLanguage.flagClass"></span>
-                  </span>
-                  <ChevronDown :size="16" style="color: var(--text-muted);" />
-                </button>
-
-                <div v-if="languageMenuOpen"
-                  class="absolute right-0 z-30 mt-2 grid border p-1 shadow-[4px_4px_0_rgba(0,0,0,0.28)]"
-                  style="border-color: var(--glass-border); background: var(--bg-card);">
-                  <button v-for="language in languages" :key="language.value"
-                    class="inline-flex h-9 w-11 items-center justify-center text-sm font-semibold transition cursor-pointer"
-                    :aria-label="t(languageLabelKeys[language.value])" type="button" :style="appSettings.general.language === language.value
-                      ? 'background: var(--primary); color: white;'
-                      : 'background: transparent; color: var(--text-main);'" @click="setLanguage(language.value)">
-                    <span :class="language.flagClass"></span>
-                  </button>
-                </div>
-              </div>
-
               <div class="inline-flex items-center border p-1"
-                style="border-color: var(--glass-border); background: var(--glass);">
+                style="border-color: var(--glass-border); background: var(--glass); border-radius: var(--radius-control);">
                 <button class="grid h-7 w-9 place-items-center transition cursor-pointer" type="button"
                   :title="t('settings.dark')" :aria-label="t('settings.dark')" :style="appSettings.ui.theme === 'dark'
-                    ? 'background: var(--primary); color: white;'
+                    ? 'background: var(--primary); color: white; border-radius: 4px;'
                     : 'background: transparent; color: var(--text-main);'" @click="appSettings.ui.theme = 'dark'">
                   <Moon :size="17" />
                 </button>
                 <button class="grid h-7 w-9 place-items-center transition cursor-pointer" type="button"
                   :title="t('settings.light')" :aria-label="t('settings.light')" :style="appSettings.ui.theme === 'light'
-                    ? 'background: var(--primary); color: white;'
+                    ? 'background: var(--primary); color: white; border-radius: 4px;'
                     : 'background: transparent; color: var(--text-main);'" @click="appSettings.ui.theme = 'light'">
                   <Sun :size="17" />
                 </button>
               </div>
 
-              <div v-if="systemInfo" class="flex min-w-0 items-center gap-2 border px-3 py-1.5 text-sm sm:px-4"
+              <div v-if="systemInfo" class="flex min-w-0 items-center gap-2 rounded-md border px-3 py-1.5 text-sm sm:px-4"
                 style="border-color: var(--glass-border); background: var(--glass);">
-                <span class="h-2.5 w-2.5 animate-pulse" style="background: var(--success);"></span>
+                <span class="h-2.5 w-2.5 animate-pulse rounded-full" style="background: var(--success);"></span>
                 <span class="truncate">Docker {{ systemInfo.ServerVersion }}</span>
               </div>
             </div>

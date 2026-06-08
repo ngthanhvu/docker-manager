@@ -1,5 +1,5 @@
 import { nextTick, ref, type Ref, useTemplateRef, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { useI18n } from '../i18n';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { getWsUrl } from '../api';

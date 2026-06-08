@@ -3,13 +3,11 @@ import { reactive, watch } from 'vue';
 const SETTINGS_KEY = 'docker-manager-settings-v1';
 const BUILD_APP_VERSION = String(import.meta.env.VITE_APP_VERSION || '3.1.1').trim();
 const BUILD_DATE = String(import.meta.env.VITE_BUILD_DATE || '2026-03-30').trim();
-const DEFAULT_LANGUAGE = 'en';
 
 export type AppSettings = {
     general: {
         autoRefreshMs: number;
         confirmDestructive: boolean;
-        language: 'vi' | 'en' | 'zh';
         timeFormat: '24h' | '12h';
     };
     ui: {
@@ -50,7 +48,6 @@ const defaults: AppSettings = {
     general: {
         autoRefreshMs: 5000,
         confirmDestructive: true,
-        language: DEFAULT_LANGUAGE,
         timeFormat: '24h',
     },
     ui: {
@@ -92,6 +89,11 @@ const terminalThemes = new Set(['ocean', 'matrix', 'amber']);
 
 const normalize = (raw: AppSettings): AppSettings => ({
     ...raw,
+    general: {
+        autoRefreshMs: Number(raw.general?.autoRefreshMs || defaults.general.autoRefreshMs),
+        confirmDestructive: raw.general?.confirmDestructive ?? defaults.general.confirmDestructive,
+        timeFormat: raw.general?.timeFormat === '12h' ? '12h' : '24h',
+    },
     ui: {
         ...raw.ui,
         fontScale: clamp(Number(raw.ui?.fontScale || 1), 0.9, 1.15),
@@ -141,7 +143,7 @@ const loadSettings = (): AppSettings => {
 const applySettings = (settings: AppSettings) => {
     const root = document.documentElement;
     root.setAttribute('data-theme', settings.ui.theme);
-    root.setAttribute('lang', settings.general.language);
+    root.setAttribute('lang', 'en');
     root.style.setProperty('--font-scale', String(settings.ui.fontScale));
     root.style.setProperty('--density-scale', settings.ui.density === 'compact' ? '0.92' : '1');
 };

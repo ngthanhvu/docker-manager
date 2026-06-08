@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Eye, Play, RefreshCw, RotateCw, Save, Search, Square, Trash2, X } from 'lucide-vue-next';
-import { useI18n } from 'vue-i18n';
+import { useI18n } from '../i18n';
 import { dockerApi } from '../api';
 import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
