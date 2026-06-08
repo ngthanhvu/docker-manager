@@ -522,35 +522,28 @@ watch(
                     <button class="view-toggle-btn" :class="{ 'is-active': viewMode === 'list' }" type="button"
                         :title="t('containersView.listView')" @click="viewMode = 'list'">
                         <List :size="16" />
-                        {{ t('containersView.listView') }}
                     </button>
                     <button class="view-toggle-btn" :class="{ 'is-active': viewMode === 'card' }" type="button"
                         :title="t('containersView.cardView')" @click="viewMode = 'card'">
                         <LayoutGrid :size="16" />
-                        {{ t('containersView.cardView') }}
                     </button>
                 </div>
                 <button class="btn btn-ghost" :disabled="selectedCount === 0 || pruning" @click="bulkStart">
                     <Play :size="16" />
-                    {{ t('compose.start') }}
                 </button>
                 <button class="btn btn-ghost" :disabled="selectedCount === 0 || pruning" @click="bulkRestart">
                     <RefreshCw :size="16" />
-                    {{ t('compose.restart') }}
                 </button>
                 <button class="btn btn-ghost text-danger" :disabled="selectedCount === 0 || pruning"
                     @click="bulkDelete">
                     <Trash2 :size="16" />
-                    {{ t('common.delete') }}
                 </button>
                 <button class="btn btn-ghost text-warning" :disabled="pruning" @click="pruneContainers">
                     <RefreshCw v-if="pruning" :size="16" class="animate-spin" />
                     <BrushCleaning v-else :size="16" />
-                    {{ t('common.prune') }}
                 </button>
                 <button class="btn btn-ghost" :disabled="pruning" @click="fetchContainers">
                     <RefreshCw :size="18" :class="{ 'animate-spin': loading || pruning }" />
-                    {{ t('common.refresh') }}
                 </button>
             </div>
         </div>
@@ -563,11 +556,21 @@ watch(
                             <input class="bulk-checkbox" type="checkbox" :checked="allPageSelected"
                                 @change="toggleSelectAllPage" />
                         </th>
-                        <th class="name-cell"><button class="sort-header" type="button" @click="toggleSort('name')">{{ t('containersView.name') }}<span class="sort-indicator">{{ getSortIndicator('name') }}</span></button></th>
-                        <th class="image-cell"><button class="sort-header" type="button" @click="toggleSort('image')">{{ t('containersView.image') }}<span class="sort-indicator">{{ getSortIndicator('image') }}</span></button></th>
-                        <th class="status-cell"><button class="sort-header" type="button" @click="toggleSort('status')">{{ t('containersView.status') }}<span class="sort-indicator">{{ getSortIndicator('status') }}</span></button></th>
-                        <th class="ports-cell"><button class="sort-header" type="button" @click="toggleSort('ports')">{{ t('containersView.ports') }}<span class="sort-indicator">{{ getSortIndicator('ports') }}</span></button></th>
-                        <th class="time-cell"><button class="sort-header" type="button" @click="toggleSort('created')">{{ t('containersView.created') }}<span class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
+                        <th class="name-cell"><button class="sort-header" type="button" @click="toggleSort('name')">{{
+                            t('containersView.name') }}<span class="sort-indicator">{{ getSortIndicator('name')
+                                    }}</span></button></th>
+                        <th class="image-cell"><button class="sort-header" type="button" @click="toggleSort('image')">{{
+                            t('containersView.image') }}<span class="sort-indicator">{{ getSortIndicator('image')
+                                    }}</span></button></th>
+                        <th class="status-cell"><button class="sort-header" type="button"
+                                @click="toggleSort('status')">{{ t('containersView.status') }}<span
+                                    class="sort-indicator">{{ getSortIndicator('status') }}</span></button></th>
+                        <th class="ports-cell"><button class="sort-header" type="button" @click="toggleSort('ports')">{{
+                            t('containersView.ports') }}<span class="sort-indicator">{{ getSortIndicator('ports')
+                                    }}</span></button></th>
+                        <th class="time-cell"><button class="sort-header" type="button"
+                                @click="toggleSort('created')">{{ t('containersView.created') }}<span
+                                    class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
                         <th class="actions-cell">{{ t('common.actions') }}</th>
                     </tr>
                 </thead>
@@ -644,7 +647,8 @@ watch(
             </div>
 
             <div v-else class="container-card-grid">
-                <article v-for="container in paginatedContainers" :key="container.Id" class="glass-panel container-card">
+                <article v-for="container in paginatedContainers" :key="container.Id"
+                    class="glass-panel container-card">
                     <div class="container-card-header">
                         <label class="card-check">
                             <input class="bulk-checkbox" type="checkbox" :checked="selectedIds.includes(container.Id)"
@@ -667,7 +671,8 @@ watch(
                     <div class="card-meta-list">
                         <div class="card-meta-item">
                             <span class="card-meta-label">{{ t('containersView.resources') }}</span>
-                            <div v-if="container.Status.includes('Up') && getContainerStats(container.Id)" class="resource-meters">
+                            <div v-if="container.Status.includes('Up') && getContainerStats(container.Id)"
+                                class="resource-meters">
                                 <div class="resource-meter">
                                     <div class="resource-meter-head">
                                         <span>{{ t('nav.cpu') }}</span>
@@ -701,36 +706,32 @@ watch(
                             :title="t('common.actions')" @click.stop="toggleCardMenu(container.Id)">
                             <Ellipsis :size="16" />
                         </button>
-                        <div v-if="activeCardMenuId === container.Id" class="card-actions-popover glass-panel" @click.stop>
-                            <button v-if="!container.Status.includes('Up')" class="card-action-item action-start" type="button"
-                                @click="handleCardAction('start', container)">
+                        <div v-if="activeCardMenuId === container.Id" class="card-actions-popover glass-panel"
+                            @click.stop>
+                            <button v-if="!container.Status.includes('Up')" class="card-action-item action-start"
+                                type="button" @click="handleCardAction('start', container)">
                                 <Play :size="16" />
-                                {{ t('compose.start') }}
                             </button>
                             <button v-else class="card-action-item action-stop" type="button"
                                 @click="handleCardAction('stop', container)">
                                 <Square :size="16" />
-                                {{ t('compose.stop') }}
                             </button>
-                            <button class="card-action-item action-neutral" type="button" :disabled="!container.Status.includes('Up')"
+                            <button class="card-action-item action-neutral" type="button"
+                                :disabled="!container.Status.includes('Up')"
                                 @click="handleCardAction('restart', container)">
                                 <RotateCw :size="16" />
-                                {{ t('compose.restart') }}
                             </button>
                             <button class="card-action-item action-neutral" type="button"
                                 @click="handleCardAction('logs', container)">
                                 <FileText :size="16" />
-                                {{ t('compose.logs') }}
                             </button>
                             <button class="card-action-item action-neutral" type="button"
                                 @click="handleCardAction('terminal', container)">
                                 <TerminalIcon :size="16" />
-                                {{ t('containersView.terminalAction') }}
                             </button>
                             <button class="card-action-item action-danger" type="button"
                                 @click="handleCardAction('remove', container)">
                                 <Trash2 :size="16" />
-                                {{ t('common.remove') }}
                             </button>
                         </div>
                     </div>
@@ -747,11 +748,13 @@ watch(
                 <span>{{ pageStart }}-{{ pageEnd }} / {{ totalItems }}</span>
             </div>
             <div class="pager-actions">
-                <button class="btn btn-ghost btn-icon" :disabled="currentPage === 1" :aria-label="t('common.prev')" :title="t('common.prev')" @click="currentPage--">
+                <button class="btn btn-ghost btn-icon" :disabled="currentPage === 1" :aria-label="t('common.prev')"
+                    :title="t('common.prev')" @click="currentPage--">
                     <ChevronLeft :size="16" />
                 </button>
                 <span class="pager-page">{{ t('common.page') }} {{ currentPage }} / {{ totalPages }}</span>
-                <button class="btn btn-ghost btn-icon" :disabled="currentPage >= totalPages" :aria-label="t('common.next')" :title="t('common.next')" @click="currentPage++">
+                <button class="btn btn-ghost btn-icon" :disabled="currentPage >= totalPages"
+                    :aria-label="t('common.next')" :title="t('common.next')" @click="currentPage++">
                     <ChevronRight :size="16" />
                 </button>
             </div>
@@ -783,7 +786,8 @@ watch(
                             </div>
                             <h3>{{ t('containersView.logsTitle', {
                                 name: activeContainer?.Names?.[0]?.replace('/', '')
-                                || '' }) }}</h3>
+                                    || ''
+                            }) }}</h3>
                         </div>
                         <div class="modal-actions">
                             <button class="btn btn-ghost btn-icon modal-tool-btn" type="button"
@@ -837,7 +841,8 @@ watch(
                             </div>
                             <h3>{{ t('containersView.terminalTitle', {
                                 name: activeContainer?.Names?.[0]?.replace('/',
-                                '') || '' }) }}</h3>
+                                    '') || ''
+                            }) }}</h3>
                             <span class="terminal-shell-pill">{{ appSettings.runtime.terminalShell }}</span>
                         </div>
                         <div class="modal-actions">
@@ -1741,6 +1746,157 @@ th.time-cell .sort-header {
     .modal-title-wrap,
     .terminal-title-wrap {
         flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 1280px) {
+    .container-list-view {
+        gap: 18px;
+    }
+
+    .toolbar {
+        padding: 10px 16px;
+        gap: 10px;
+    }
+
+    .toolbar-actions {
+        gap: 6px;
+    }
+
+    .toolbar-actions .btn {
+        min-height: 36px;
+        padding: 7px 10px;
+        font-size: 0.82rem;
+    }
+
+    .search-box {
+        width: 300px;
+        padding: 7px 12px;
+    }
+
+    .view-toggle-btn {
+        min-height: 34px;
+        padding: 0 10px;
+    }
+
+    .docker-table {
+        min-width: 0;
+        table-layout: fixed;
+    }
+
+    .docker-table th,
+    .docker-table td {
+        overflow: hidden;
+        padding: 10px 12px;
+        text-overflow: ellipsis;
+    }
+
+    .check-col {
+        width: 44px;
+        min-width: 44px;
+    }
+
+    .name-cell {
+        min-width: 0;
+        width: 24%;
+    }
+
+    .image-cell {
+        width: 20%;
+        min-width: 0;
+        max-width: none;
+    }
+
+    .status-cell {
+        width: 20%;
+        min-width: 0;
+    }
+
+    .ports-cell {
+        width: 14%;
+        min-width: 0;
+    }
+
+    .time-cell {
+        display: none;
+    }
+
+    .actions-cell {
+        width: 164px;
+        min-width: 164px;
+    }
+
+    .action-btn {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+    }
+
+    .action-group {
+        gap: 4px;
+        justify-content: flex-end;
+    }
+
+    .container-name,
+    .image-name,
+    .status-pill {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .status-pill {
+        max-width: 100%;
+        white-space: nowrap;
+    }
+
+    .ports {
+        justify-content: center;
+    }
+}
+
+@media (max-height: 800px) and (min-width: 901px) {
+    .container-list-view {
+        gap: 16px;
+    }
+
+    .toolbar {
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+
+    .docker-table th,
+    .docker-table td {
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+
+    .pagination {
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+}
+
+@media (max-width: 1100px) and (min-width: 901px) {
+    .ports-cell {
+        display: none;
+    }
+
+    .name-cell {
+        width: 30%;
+    }
+
+    .image-cell {
+        width: 25%;
+    }
+
+    .status-cell {
+        width: 25%;
+    }
+
+    .actions-cell {
+        width: 156px;
+        min-width: 156px;
     }
 }
 </style>

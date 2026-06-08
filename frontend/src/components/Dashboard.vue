@@ -307,10 +307,10 @@ const monitoringChartOption = computed(() => ({
     fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
   },
   grid: {
-    left: 58,
-    right: 26,
-    top: 28,
-    bottom: 92,
+    left: 48,
+    right: 18,
+    top: 24,
+    bottom: 74,
     containLabel: false,
   },
   tooltip: {
@@ -382,9 +382,9 @@ const monitoringChartOption = computed(() => ({
     {
       type: 'slider',
       height: 34,
-      bottom: 18,
-      left: 34,
-      right: 34,
+      bottom: 14,
+      left: 28,
+      right: 28,
       borderColor: chartTheme.value.zoomBorder,
       backgroundColor: chartTheme.value.zoomBg,
       fillerColor: chartTheme.value.zoomFill,
@@ -541,21 +541,22 @@ watch(activeNetworkInterfaces, (interfaces) => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
-    <div class="grid gap-4 xl:grid-cols-4">
+  <div class="dashboard-view flex flex-col gap-6">
+    <div class="dashboard-summary-grid grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <div v-for="card in [
         { key: 'containers', label: t('dashboard.containers'), value: `${systemInfo?.ContainersRunning || 0} / ${systemInfo?.Containers || 0}`, detail: t('dashboard.runningTotal'), icon: Container, tone: 'var(--primary)' },
         { key: 'images', label: t('dashboard.images'), value: `${systemInfo?.Images || 0}`, detail: t('dashboard.localArtifacts'), icon: Box, tone: 'var(--success)' },
         { key: 'volumes', label: t('dashboard.volumes'), value: `${volumeCount}`, detail: t('dashboard.dockerVolumes'), icon: HardDrive, tone: 'var(--warning)' },
         { key: 'networks', label: t('dashboard.networks'), value: `${networkCount}`, detail: t('dashboard.dockerNetworks'), icon: Network, tone: '#58a6ff' },
-      ]" :key="card.key" class="glass-panel p-5">
-        <div class="mb-6 flex items-start justify-between gap-4">
+      ]" :key="card.key" class="dashboard-summary-card glass-panel p-5">
+        <div class="dashboard-summary-head mb-6 flex items-start justify-between gap-4">
           <div>
-            <p class="mb-2 text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{ card.label }}
+            <p class="mb-2 text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
+              card.label }}
             </p>
-            <div class="text-3xl font-semibold tracking-tight">{{ card.value }}</div>
+            <div class="dashboard-summary-value text-3xl font-semibold tracking-tight">{{ card.value }}</div>
           </div>
-          <div class="grid h-11 w-11 place-items-center rounded-lg border"
+          <div class="dashboard-summary-icon grid h-11 w-11 place-items-center rounded-lg border"
             :style="{ borderColor: card.tone, color: card.tone, background: 'color-mix(in srgb, ' + card.tone + ' 12%, transparent)' }">
             <component :is="card.icon" :size="18" />
           </div>
@@ -566,13 +567,13 @@ watch(activeNetworkInterfaces, (interfaces) => {
       </div>
     </div>
 
-    <div class="grid gap-6 2xl:grid-cols-[360px_minmax(0,1fr)]">
+    <div class="dashboard-detail-grid grid gap-6 2xl:grid-cols-[360px_minmax(0,1fr)]">
       <section class="glass-panel p-5">
         <p class="section-heading">{{ t('dashboard.statusRings') }}</p>
-        <div class="grid gap-5 md:grid-cols-3 2xl:grid-cols-1">
+        <div class="dashboard-gauge-grid grid gap-5 md:grid-cols-3 2xl:grid-cols-1">
           <div v-for="g in gauges" :key="g.key" class="rounded-lg border p-4 text-center"
             style="border-color: var(--glass-border); background: var(--glass);">
-            <div class="mx-auto grid h-32 w-32 place-items-center rounded-full border-10"
+            <div class="dashboard-gauge-ring mx-auto grid h-32 w-32 place-items-center rounded-full border-10"
               :style="{ borderColor: 'rgba(255,255,255,0.08)', borderTopColor: 'var(--primary)', borderRightColor: g.key === 'memory' ? 'var(--warning)' : 'var(--primary)' }">
               <div class="text-center">
                 <div class="text-3xl font-semibold leading-none">
@@ -587,7 +588,7 @@ watch(activeNetworkInterfaces, (interfaces) => {
       </section>
 
       <section class="glass-panel p-5">
-        <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div class="dashboard-monitor-head mb-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div>
             <div class="mb-2 flex items-center gap-2 text-lg font-semibold">
               <Activity :size="18" />
@@ -598,21 +599,22 @@ watch(activeNetworkInterfaces, (interfaces) => {
             </p>
           </div>
 
-          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <div class="inline-flex border" style="border-color: var(--glass-border);">
-              <button class="px-4 py-2 text-sm font-medium"
+          <div class="dashboard-monitor-controls flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <div class="dashboard-mode-toggle inline-flex border" style="border-color: var(--glass-border);">
+              <button class="dashboard-mode-btn px-4 py-2 text-sm font-medium"
                 :style="monitorMode === 'network' ? 'background: var(--primary); color: white; border-radius: 5px;' : 'background: var(--glass); color: var(--text-muted);'"
                 @click="monitorMode = 'network'">
                 {{ t('dashboard.network') }}
               </button>
-              <button class="px-4 py-2 text-sm font-medium"
+              <button class="dashboard-mode-btn px-4 py-2 text-sm font-medium"
                 :style="monitorMode === 'disk' ? 'background: var(--primary); color: white; border-radius: 5px;' : 'background: var(--glass); color: var(--text-muted);'"
                 @click="monitorMode = 'disk'">
                 {{ t('dashboard.disk') }}
               </button>
             </div>
 
-            <label v-if="monitorMode === 'network'" class="relative flex min-w-47.5 items-center rounded-md border pr-10"
+            <label v-if="monitorMode === 'network'"
+              class="dashboard-iface-select relative flex min-w-47.5 items-center rounded-md border pr-10"
               style="border-color: var(--glass-border); background: var(--glass);">
               <span class="px-3 text-xs uppercase tracking-[0.2em]" style="color: var(--text-muted);">{{
                 t('dashboard.iface') }}</span>
@@ -627,8 +629,8 @@ watch(activeNetworkInterfaces, (interfaces) => {
           </div>
         </div>
 
-        <div class="mb-4 flex flex-wrap gap-2">
-          <div v-for="pill in monitoringPills" :key="pill.label" class="rounded-md border px-3 py-2 text-sm"
+        <div class="dashboard-monitor-pills mb-4 flex flex-wrap gap-2">
+          <div v-for="pill in monitoringPills" :key="pill.label" class="dashboard-monitor-pill rounded-md border px-3 py-2 text-sm"
             style="border-color: var(--glass-border); background: var(--glass);">
             <span style="color: var(--text-muted);">{{ pill.label }}:</span>
             <strong class="ml-2">{{ pill.value }}</strong>
@@ -642,8 +644,157 @@ watch(activeNetworkInterfaces, (interfaces) => {
           </span>
         </div>
 
-        <VChart class="h-115 w-full" :option="monitoringChartOption" autoresize />
+        <VChart class="dashboard-chart w-full" :option="monitoringChartOption" autoresize />
       </section>
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 1280px) {
+  .dashboard-view {
+    gap: 18px;
+  }
+
+  .dashboard-summary-grid,
+  .dashboard-detail-grid {
+    gap: 16px;
+  }
+
+  .dashboard-summary-card {
+    padding: 16px;
+  }
+
+  .dashboard-summary-head {
+    margin-bottom: 18px;
+  }
+
+  .dashboard-summary-value {
+    font-size: 1.75rem;
+    line-height: 2.1rem;
+  }
+
+  .dashboard-summary-icon {
+    height: 40px;
+    width: 40px;
+  }
+
+  .dashboard-gauge-grid {
+    gap: 14px;
+  }
+
+  .dashboard-gauge-ring {
+    height: 112px;
+    width: 112px;
+  }
+
+  .dashboard-chart {
+    height: 320px;
+  }
+
+  .dashboard-monitor-head {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .dashboard-monitor-controls {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 8px;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .dashboard-mode-toggle {
+    flex-shrink: 0;
+  }
+
+  .dashboard-mode-btn {
+    min-height: 34px;
+    padding: 7px 12px;
+    white-space: nowrap;
+  }
+
+  .dashboard-iface-select {
+    min-height: 34px;
+    min-width: 150px;
+    flex: 0 0 auto;
+  }
+
+  .dashboard-iface-select span {
+    padding-left: 10px;
+    padding-right: 10px;
+    letter-spacing: 0.12em;
+  }
+
+  .dashboard-iface-select :deep(.app-select) {
+    min-height: 32px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  .dashboard-monitor-pills {
+    flex-wrap: nowrap;
+    gap: 8px;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .dashboard-monitor-pill {
+    flex: 0 0 auto;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-gauge-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 800px) and (min-width: 901px) {
+  .dashboard-view {
+    gap: 16px;
+  }
+
+  .dashboard-summary-card {
+    padding: 14px;
+  }
+
+  .dashboard-summary-head {
+    margin-bottom: 14px;
+  }
+
+  .dashboard-chart {
+    height: 280px;
+  }
+
+  .dashboard-monitor-head {
+    margin-bottom: 12px;
+  }
+
+  .dashboard-monitor-pills {
+    margin-bottom: 10px;
+  }
+}
+
+@media (min-width: 1281px) {
+  .dashboard-chart {
+    height: 420px;
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-chart {
+    height: 260px;
+  }
+}
+</style>

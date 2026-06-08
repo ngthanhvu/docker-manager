@@ -720,11 +720,13 @@ watch(selectedFilePath, () => {
                     :class="{ active: selectedProjectName === project.name }" @click="selectProject(project.name)">
                     <div class="row-1">
                         <span class="name">{{ project.name }}</span>
-                        <span class="status" :class="getProjectStatusClass(project.status)">{{ getProjectStatusLabel(project.status) }}</span>
+                        <span class="status" :class="getProjectStatusClass(project.status)">{{
+                            getProjectStatusLabel(project.status) }}</span>
                     </div>
                     <div class="row-2">{{ project.running }} / {{ project.total }}</div>
                 </button>
-                <div v-if="filteredProjects.length === 0 && !loadingProjects" class="empty">{{ t('compose.noProjects') }}</div>
+                <div v-if="filteredProjects.length === 0 && !loadingProjects" class="empty">{{ t('compose.noProjects')
+                    }}</div>
             </div>
         </aside>
 
@@ -740,28 +742,23 @@ watch(selectedFilePath, () => {
                             <button class="btn btn-ghost action-btn" :title="t('compose.start')"
                                 @click="runAction('start', selectedProject.name)">
                                 <Play :size="16" />
-                                <span>{{ t('compose.start') }}</span>
                             </button>
                             <button class="btn btn-ghost action-btn" :title="t('compose.stop')"
                                 @click="runAction('stop', selectedProject.name)">
                                 <Square :size="16" />
-                                <span>{{ t('compose.stop') }}</span>
                             </button>
                             <button class="btn btn-ghost action-btn" :title="t('compose.restart')"
                                 @click="runAction('restart', selectedProject.name)">
                                 <RotateCw :size="16" />
-                                <span>{{ t('compose.restart') }}</span>
                             </button>
                             <button class="btn btn-ghost action-btn"
                                 @click="reloadDetailsWithGuard(selectedProject.name, t('compose.discardReload'))">
                                 <RefreshCw :size="16" />
-                                <span>{{ t('compose.reload') }}</span>
                             </button>
                         </div>
                         <button class="btn btn-danger-soft action-btn danger-btn" :title="t('compose.down')"
                             @click="runAction('down', selectedProject.name)">
                             <Trash2 :size="16" />
-                            <span>{{ t('compose.down') }}</span>
                         </button>
                     </div>
                 </div>
@@ -769,7 +766,8 @@ watch(selectedFilePath, () => {
                 <div class="services-panel">
                     <div class="panel-head services-head">
                         <h4>{{ t('compose.services') }}</h4>
-                        <span class="hint">{{ t('compose.containersCount', { count: selectedProject.services.length }) }}</span>
+                        <span class="hint">{{ t('compose.containersCount', { count: selectedProject.services.length })
+                            }}</span>
                     </div>
                     <div class="services-table-wrap">
                         <table class="services-table">
@@ -844,12 +842,14 @@ watch(selectedFilePath, () => {
                         </div>
                         <div class="panel-body file-body file-editor-layout"
                             :class="{ 'has-file-list': hasMultipleComposeFiles }">
-                            <div v-if="files.length === 0 && !loadingFiles" class="empty">{{ t('compose.noProjectFiles') }}</div>
+                            <div v-if="files.length === 0 && !loadingFiles" class="empty">{{ t('compose.noProjectFiles')
+                                }}</div>
 
                             <div v-if="hasMultipleComposeFiles" class="file-list">
                                 <button v-for="file in files" :key="file.path" class="file-item-btn"
                                     :class="{ active: selectedFilePath === file.path }" @click="selectFile(file.path)">
-                                    <span class="file-kind" :class="{ 'file-kind-env': file.kind === 'env' }">{{ getFileKindLabel(file) }}</span>
+                                    <span class="file-kind" :class="{ 'file-kind-env': file.kind === 'env' }">{{
+                                        getFileKindLabel(file) }}</span>
                                     <span class="file-path-short">{{ getFileName(file.path) }}</span>
                                 </button>
                             </div>
@@ -857,7 +857,9 @@ watch(selectedFilePath, () => {
                             <div v-if="selectedFile" class="file-editor-box">
                                 <div class="file-path">
                                     <div class="file-path-meta">
-                                        <span class="file-chip" :class="{ 'file-chip-env': selectedFile.kind === 'env' }">{{ getFileKindLabel(selectedFile) }}</span>
+                                        <span class="file-chip"
+                                            :class="{ 'file-chip-env': selectedFile.kind === 'env' }">{{
+                                            getFileKindLabel(selectedFile) }}</span>
                                         <span>{{ getEditorTitle(selectedFile) }}</span>
                                     </div>
                                     <div v-if="selectedFile" class="editor-actions editor-actions-inline">
@@ -900,7 +902,8 @@ watch(selectedFilePath, () => {
                                     <textarea ref="editorInput" v-model="fileDraft" class="code editor"
                                         spellcheck="false" @scroll="syncEditorScroll" />
                                 </div>
-                                <pre v-else class="code error">{{ t('compose.cannotReadFile', { error: selectedFile.error }) }}</pre>
+                                <pre v-else
+                                    class="code error">{{ t('compose.cannotReadFile', { error: selectedFile.error }) }}</pre>
                             </div>
                         </div>
                     </div>
@@ -1915,6 +1918,16 @@ watch(selectedFilePath, () => {
 }
 
 @media (max-width: 1320px) {
+    .compose-layout {
+        grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .left-col,
+    .right-col {
+        padding: 12px;
+    }
+
     .detail-header {
         align-items: stretch;
     }
@@ -1929,6 +1942,11 @@ watch(selectedFilePath, () => {
 
     .splitter {
         display: none;
+    }
+
+    .editor-shell,
+    .editor {
+        min-height: 420px;
     }
 }
 </style>

@@ -157,9 +157,9 @@ watch(() => appSettings.general.autoRefreshMs, () => {
     </div>
 
     <aside class="fixed inset-y-0 left-0 z-40 w-[min(18rem,calc(100vw-2rem))] overflow-hidden p-3 transition-all duration-200 ease-out sm:p-4 lg:sticky lg:top-0 lg:z-10 lg:h-screen lg:shrink-0"
-      :class="sidebarOpen ? 'translate-x-0 lg:w-73 lg:p-4' : '-translate-x-full lg:w-28 lg:translate-x-0 lg:p-4'">
+      :class="sidebarOpen ? 'translate-x-0 lg:w-73 lg:p-3 xl:p-4' : '-translate-x-full lg:w-24 lg:translate-x-0 lg:p-3 xl:w-[6.5rem] xl:p-4'">
       <div class="glass-panel flex h-full flex-col overflow-hidden lg:h-[calc(100vh-2rem)]">
-        <div class="flex border-b px-4 py-4 sm:px-5 lg:h-[77px] lg:items-center lg:py-0"
+        <div class="flex border-b px-4 py-4 sm:px-5 lg:h-16 lg:items-center lg:py-0 xl:h-[77px]"
           :class="sidebarOpen ? '' : 'lg:justify-center lg:px-0'" style="border-color: var(--glass-border);">
           <div class="flex items-center gap-3" :class="sidebarOpen ? '' : 'lg:w-full lg:justify-center'">
             <div class="grid h-10 w-10 shrink-0 place-items-center rounded-lg border text-xl"
@@ -221,23 +221,23 @@ watch(() => appSettings.general.autoRefreshMs, () => {
       </div>
     </aside>
 
-    <main class="min-w-0 flex-1 p-2 sm:p-4 lg:pl-0">
+    <main class="min-w-0 flex-1 p-2 sm:p-3 lg:pl-0 xl:p-4 xl:pl-0">
       <div class="glass-panel flex h-[calc(100dvh-1rem)] min-w-0 flex-col overflow-hidden sm:h-[calc(100dvh-2rem)]">
-        <header class="flex border-b px-4 py-3 sm:px-6 sm:py-4 lg:h-[77px] lg:items-center lg:py-0"
+        <header class="flex border-b px-4 py-3 sm:px-5 sm:py-3 lg:min-h-16 lg:items-center lg:py-2 xl:min-h-[77px] xl:px-6"
           style="border-color: var(--glass-border); background: var(--bg-card);">
-          <div class="flex w-full flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div class="flex w-full min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div class="flex min-w-0 items-center gap-3">
               <button class="btn btn-icon shrink-0" type="button" :aria-expanded="sidebarOpen" :aria-label="t('nav.toggleSidebar')"
                 @click="toggleSidebar">
                 <Menu :size="18" />
               </button>
               <div class="min-w-0">
-                <h1 class="truncate text-xl font-semibold tracking-tight sm:text-2xl">{{ activeTabMeta ? t(activeTabMeta.nameKey) : ''
+                <h1 class="truncate text-lg font-semibold tracking-tight sm:text-xl xl:text-2xl">{{ activeTabMeta ? t(activeTabMeta.nameKey) : ''
                 }}</h1>
               </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
+            <div class="flex min-w-0 shrink-0 flex-wrap items-center gap-2 sm:justify-end sm:gap-3">
               <div class="inline-flex items-center border p-1"
                 style="border-color: var(--glass-border); background: var(--glass); border-radius: var(--radius-control);">
                 <button class="grid h-7 w-9 place-items-center transition cursor-pointer" type="button"
@@ -254,7 +254,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 </button>
               </div>
 
-              <div v-if="systemInfo" class="flex min-w-0 items-center gap-2 rounded-md border px-3 py-1.5 text-sm sm:px-4"
+              <div v-if="systemInfo" class="hidden min-w-0 items-center gap-2 rounded-md border px-3 py-1.5 text-sm min-[1180px]:flex sm:px-4"
                 style="border-color: var(--glass-border); background: var(--glass);">
                 <span class="h-2.5 w-2.5 animate-pulse rounded-full" style="background: var(--success);"></span>
                 <span class="truncate">Docker {{ systemInfo.ServerVersion }}</span>
@@ -263,7 +263,7 @@ watch(() => appSettings.general.autoRefreshMs, () => {
           </div>
         </header>
 
-        <section class="animate-fade-in min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-8 sm:py-6">
+        <section class="animate-fade-in min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 sm:py-5 xl:px-8 xl:py-6">
           <Dashboard v-if="activeTab === 'dashboard'" :system-info="systemInfo" :resource-counts="resourceCounts" />
           <ContainerList v-else-if="activeTab === 'containers'" />
           <ImageList v-else-if="activeTab === 'images'" />

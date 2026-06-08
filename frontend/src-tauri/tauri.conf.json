@@ -4,18 +4,18 @@
   "version": "0.1.0",
   "identifier": "com.ngthanhvu.dockemanagerapp",
   "build": {
-    "frontendDist": "../frontend/dist",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "yarn --cwd frontend dev",
-    "beforeBuildCommand": "yarn --cwd frontend build"
+    "beforeDevCommand": "yarn dev",
+    "beforeBuildCommand": "yarn build"
   },
   "app": {
     "windows": [
       {
         "title": "Dock Manager",
-        "width": 1800,
-        "height": 900,
-        "minWidth": 1024,
+        "width": 1240,
+        "height": 700,
+        "minWidth": 1240,
         "minHeight": 700,
         "resizable": true,
         "fullscreen": false
