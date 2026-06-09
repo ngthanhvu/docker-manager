@@ -102,6 +102,7 @@ watch(
   () => overlayState.visible,
   (open) => {
     document.body.style.overflow = open ? 'hidden' : '';
+    document.documentElement.style.overflow = open ? 'hidden' : '';
   }
 );
 
@@ -131,13 +132,15 @@ onMounted(() => {
 onUnmounted(() => {
   updateOverlay.disconnect();
   document.body.style.overflow = '';
+  document.documentElement.style.overflow = '';
 });
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="overlayState.visible" class="update-console-backdrop" @click.self="closeUpdateConsole">
-      <div class="update-console-panel">
+    <div v-if="overlayState.visible" class="update-console-backdrop" @click.self="closeUpdateConsole"
+      @wheel.self.prevent @touchmove.self.prevent>
+      <div class="update-console-panel" @wheel.stop @touchmove.stop>
         <div class="update-console-header">
           <div class="update-progress-copy">
             <p class="section-heading mb-0">{{ t('settings.openUpdateConsole') }}</p>
@@ -185,24 +188,28 @@ onUnmounted(() => {
   inset: 0;
   z-index: 9999;
   display: flex;
-  padding: 0;
-  background: rgba(2, 6, 23, 0.86);
-  backdrop-filter: blur(10px);
+  overflow: hidden;
+  padding: 16px;
+  background: var(--overlay-bg);
+  backdrop-filter: blur(14px);
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 
 .update-console-panel {
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  width: min(1320px, 100%);
+  height: min(860px, calc(100dvh - 32px));
   min-height: 0;
+  margin: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  border: 0;
-  border-radius: 0;
-  padding: 28px;
-  background: linear-gradient(180deg, rgba(7, 14, 27, 0.98), rgba(3, 7, 18, 1));
-  box-shadow: none;
+  gap: 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-panel);
+  touch-action: auto;
 }
 
 .update-console-header {
@@ -219,27 +226,28 @@ onUnmounted(() => {
 
 .update-console-title {
   margin: 6px 0 0;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: #e2e8f0;
+  font-size: 1.2rem;
+  font-weight: 650;
+  color: var(--text-main);
+  letter-spacing: 0;
 }
 
 .update-progress-detail {
-  margin: 8px 0 0;
-  color: #94a3b8;
-  font-size: 0.95rem;
-  line-height: 1.6;
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
 }
 
 .update-progress-shell {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   flex-shrink: 0;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
-  padding: 18px;
-  background: rgba(15, 23, 42, 0.34);
+  padding: 14px;
+  background: var(--glass);
 }
 
 .update-progress-head {
@@ -247,86 +255,88 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: #cbd5e1;
-  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
 }
 
 .update-progress-head strong {
-  font-size: 1rem;
-  color: #f8fafc;
+  font-size: 0.95rem;
+  color: var(--text-main);
 }
 
 .update-progress-track {
-  height: 14px;
+  height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.16);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: color-mix(in srgb, var(--primary) 10%, var(--glass-border));
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--glass-border));
 }
 
 .update-progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #38bdf8, #2563eb 55%, #22c55e);
+  background: var(--primary);
   transition: width 0.24s ease;
 }
 
 .update-progress-fill.is-failed {
-  background: linear-gradient(90deg, #f97316, #ef4444);
+  background: var(--danger);
 }
 
 .update-phase-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .update-phase-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  gap: 8px;
+  min-height: 34px;
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
-  padding: 0 12px;
-  color: #94a3b8;
-  background: rgba(15, 23, 42, 0.22);
+  padding: 0 10px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  font-size: 0.8rem;
 }
 
 .update-phase-item .phase-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: rgba(148, 163, 184, 0.35);
+  background: color-mix(in srgb, var(--text-muted) 36%, transparent);
   flex-shrink: 0;
 }
 
 .update-phase-item.is-active {
-  color: #dbeafe;
-  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--glass-border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--glass));
 }
 
 .update-phase-item.is-active .phase-dot {
-  background: #60a5fa;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.18);
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 16%, transparent);
 }
 
 .update-phase-item.is-done {
-  color: #dcfce7;
-  border-color: rgba(34, 197, 94, 0.25);
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 28%, var(--glass-border));
 }
 
 .update-phase-item.is-done .phase-dot {
-  background: #22c55e;
+  background: var(--success);
 }
 
 .update-phase-item.is-error {
-  color: #fecaca;
-  border-color: rgba(239, 68, 68, 0.28);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 34%, var(--glass-border));
 }
 
 .update-phase-item.is-error .phase-dot {
-  background: #ef4444;
+  background: var(--danger);
 }
 
 .update-log-shell {
@@ -334,14 +344,15 @@ onUnmounted(() => {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .update-log-header {
-  font-size: 0.84rem;
+  font-size: 0.72rem;
+  font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .update-console-output {
@@ -350,19 +361,24 @@ onUnmounted(() => {
   margin: 0;
   overflow: auto;
   border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  padding: 18px;
-  background:
-    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
-  color: #dbeafe;
-  font: 13px/1.7 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  border: 1px solid var(--glass-border);
+  padding: 14px;
+  background: var(--code-bg);
+  color: var(--code-text);
+  font: 12.5px/1.6 var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
+  overscroll-behavior: contain;
 }
 
 @media (max-width: 768px) {
+  .update-console-backdrop {
+    padding: 8px;
+  }
+
   .update-console-panel {
-    padding: 16px;
+    height: calc(100dvh - 16px);
+    padding: 12px;
   }
 
   .update-console-header {
