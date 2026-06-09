@@ -7,83 +7,59 @@ import { feedback } from '../ui/feedback';
 import { appSettings } from '../ui/settings';
 import '@xterm/xterm/css/xterm.css';
 
-type TerminalThemeName = 'ocean' | 'matrix' | 'amber';
+type TerminalThemeName = 'system' | 'light' | 'dark';
 
 const getTerminalTheme = (themeName: TerminalThemeName) => {
-    if (themeName === 'matrix') {
-        return {
-            foreground: '#d1fae5',
-            background: '#03140c',
-            cursor: '#22c55e',
-            cursorAccent: '#03140c',
-            selectionBackground: 'rgba(34, 197, 94, 0.22)',
-            black: '#04130a',
-            red: '#f87171',
-            green: '#22c55e',
-            yellow: '#84cc16',
-            blue: '#34d399',
-            magenta: '#10b981',
-            cyan: '#2dd4bf',
-            white: '#d1fae5',
-            brightBlack: '#166534',
-            brightRed: '#fca5a5',
-            brightGreen: '#86efac',
-            brightYellow: '#bef264',
-            brightBlue: '#6ee7b7',
-            brightMagenta: '#34d399',
-            brightCyan: '#5eead4',
-            brightWhite: '#ecfdf5',
-        };
-    }
+    const resolvedTheme = themeName === 'system' ? appSettings.ui.theme : themeName;
 
-    if (themeName === 'amber') {
+    if (resolvedTheme === 'light') {
         return {
-            foreground: '#fef3c7',
-            background: '#1a1206',
-            cursor: '#f59e0b',
-            cursorAccent: '#1a1206',
-            selectionBackground: 'rgba(245, 158, 11, 0.24)',
-            black: '#120d05',
-            red: '#fb7185',
-            green: '#fbbf24',
-            yellow: '#f59e0b',
-            blue: '#fcd34d',
-            magenta: '#f97316',
-            cyan: '#fdba74',
-            white: '#fffbeb',
-            brightBlack: '#78350f',
-            brightRed: '#fda4af',
-            brightGreen: '#fde68a',
-            brightYellow: '#fcd34d',
-            brightBlue: '#fef08a',
-            brightMagenta: '#fdba74',
-            brightCyan: '#fed7aa',
-            brightWhite: '#fff7ed',
+            foreground: '#24292f',
+            background: '#ffffff',
+            cursor: '#5865f2',
+            cursorAccent: '#ffffff',
+            selectionBackground: 'rgba(88, 101, 242, 0.18)',
+            black: '#24292f',
+            red: '#cf222e',
+            green: '#116329',
+            yellow: '#953800',
+            blue: '#0969da',
+            magenta: '#8250df',
+            cyan: '#1b7c83',
+            white: '#f6f8fa',
+            brightBlack: '#57606a',
+            brightRed: '#a40e26',
+            brightGreen: '#1a7f37',
+            brightYellow: '#9a6700',
+            brightBlue: '#218bff',
+            brightMagenta: '#a475f9',
+            brightCyan: '#3192aa',
+            brightWhite: '#ffffff',
         };
     }
 
     return {
-        foreground: '#dbeafe',
-        background: '#081121',
-        cursor: '#60a5fa',
-        cursorAccent: '#081121',
-        selectionBackground: 'rgba(96, 165, 250, 0.24)',
-        black: '#0f172a',
+        foreground: '#f4f4f5',
+        background: '#0f1014',
+        cursor: '#7c83ff',
+        cursorAccent: '#0f1014',
+        selectionBackground: 'rgba(124, 131, 255, 0.24)',
+        black: '#18181b',
         red: '#f87171',
         green: '#34d399',
         yellow: '#fbbf24',
         blue: '#60a5fa',
         magenta: '#c084fc',
         cyan: '#22d3ee',
-        white: '#e2e8f0',
-        brightBlack: '#475569',
+        white: '#e4e4e7',
+        brightBlack: '#71717a',
         brightRed: '#fca5a5',
         brightGreen: '#86efac',
         brightYellow: '#fde68a',
         brightBlue: '#93c5fd',
         brightMagenta: '#d8b4fe',
         brightCyan: '#67e8f9',
-        brightWhite: '#f8fafc',
+        brightWhite: '#fafafa',
     };
 };
 
@@ -105,9 +81,9 @@ export const useContainerTerminal = (activeContainer: Ref<any | null>) => {
     let terminalContainerName = '';
 
     const terminalThemeOptions = [
-        { value: 'ocean', label: t('settings.themeOcean') },
-        { value: 'matrix', label: t('settings.themeMatrix') },
-        { value: 'amber', label: t('settings.themeAmber') },
+        { value: 'system', label: t('settings.themeSystem') },
+        { value: 'light', label: t('settings.themeLight') },
+        { value: 'dark', label: t('settings.themeDark') },
     ] as const;
 
     const getContainerName = (container: any) => container?.Names?.[0]?.replace('/', '') || container?.Id?.substring(0, 12) || '';
@@ -162,8 +138,13 @@ export const useContainerTerminal = (activeContainer: Ref<any | null>) => {
             if (!terminalSocket || terminalSocket.readyState !== WebSocket.OPEN) return;
             terminalSocket.send(data);
         });
-        terminalResizeObserver = new ResizeObserver(() => fitAddon?.fit());
+        terminalResizeObserver = new ResizeObserver(() => {
+            requestAnimationFrame(() => fitAddon?.fit());
+        });
         terminalResizeObserver.observe(terminalEl.value);
+        if (terminalModalPanel.value) {
+            terminalResizeObserver.observe(terminalModalPanel.value);
+        }
     };
 
     const writeTerminal = (text: string) => {
@@ -216,6 +197,11 @@ export const useContainerTerminal = (activeContainer: Ref<any | null>) => {
         } catch (err) {
             feedback.error(t('containersView.pasteFailed', { error: String(err) }));
         }
+    };
+
+    const clearTerminal = () => {
+        xterm?.clear();
+        xterm?.focus();
     };
 
     const toggleTerminalFullscreen = async () => {
@@ -280,7 +266,7 @@ export const useContainerTerminal = (activeContainer: Ref<any | null>) => {
         connectTerminal();
     };
 
-    watch(() => appSettings.runtime.terminalTheme, (themeName) => {
+    watch([() => appSettings.runtime.terminalTheme, () => appSettings.ui.theme], ([themeName]) => {
         if (!xterm) return;
         xterm.options.theme = getTerminalTheme(themeName);
         fitAddon?.fit();
@@ -303,6 +289,7 @@ export const useContainerTerminal = (activeContainer: Ref<any | null>) => {
         toggleTerminalSize,
         copyTerminalSelection,
         pasteIntoTerminal,
+        clearTerminal,
         toggleTerminalFullscreen,
         handleFullscreenChange,
     };

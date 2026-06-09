@@ -15,6 +15,7 @@ import {
     RefreshCw,
     RotateCw,
     BrushCleaning,
+    Eraser,
     Copy,
     ClipboardPaste,
     Maximize2,
@@ -67,6 +68,7 @@ const {
     toggleTerminalSize,
     copyTerminalSelection,
     pasteIntoTerminal,
+    clearTerminal,
     toggleTerminalFullscreen,
     handleFullscreenChange,
 } = useContainerTerminal(activeContainer);
@@ -558,16 +560,16 @@ watch(
                         </th>
                         <th class="name-cell"><button class="sort-header" type="button" @click="toggleSort('name')">{{
                             t('containersView.name') }}<span class="sort-indicator">{{ getSortIndicator('name')
-                                    }}</span></button></th>
+                                }}</span></button></th>
                         <th class="image-cell"><button class="sort-header" type="button" @click="toggleSort('image')">{{
                             t('containersView.image') }}<span class="sort-indicator">{{ getSortIndicator('image')
-                                    }}</span></button></th>
+                                }}</span></button></th>
                         <th class="status-cell"><button class="sort-header" type="button"
                                 @click="toggleSort('status')">{{ t('containersView.status') }}<span
                                     class="sort-indicator">{{ getSortIndicator('status') }}</span></button></th>
                         <th class="ports-cell"><button class="sort-header" type="button" @click="toggleSort('ports')">{{
                             t('containersView.ports') }}<span class="sort-indicator">{{ getSortIndicator('ports')
-                                    }}</span></button></th>
+                                }}</span></button></th>
                         <th class="time-cell"><button class="sort-header" type="button"
                                 @click="toggleSort('created')">{{ t('containersView.created') }}<span
                                     class="sort-indicator">{{ getSortIndicator('created') }}</span></button></th>
@@ -861,13 +863,18 @@ watch(
                                 @click="adjustTerminalFontSize(1)">
                                 <Plus :size="14" />
                             </button>
-                            <button class="btn btn-ghost" @click="copyTerminalSelection">
-                                <Copy :size="14" />
-                                {{ t('containersView.copy') }}
+                            <button class="btn btn-ghost btn-icon modal-tool-btn" type="button"
+                                :title="t('containersView.clearTerminal')"
+                                :aria-label="t('containersView.clearTerminal')" @click="clearTerminal">
+                                <Eraser :size="14" />
                             </button>
-                            <button class="btn btn-ghost" @click="pasteIntoTerminal">
+                            <button class="btn btn-ghost" type="button" :title="t('containersView.copy')"
+                                :aria-label="t('containersView.copy')" @click="copyTerminalSelection">
+                                <Copy :size="14" />
+                            </button>
+                            <button class="btn btn-ghost" type="button" :title="t('containersView.paste')"
+                                :aria-label="t('containersView.paste')" @click="pasteIntoTerminal">
                                 <ClipboardPaste :size="14" />
-                                {{ t('containersView.paste') }}
                             </button>
                         </div>
                     </div>
@@ -1503,14 +1510,19 @@ th.time-cell .sort-header {
 
 .terminal-modal-panel {
     width: min(1240px, 96vw);
+    height: min(780px, 88vh);
     min-width: 760px;
     min-height: 420px;
+    padding: 0;
+    gap: 0;
+    background: var(--bg-card);
     resize: both;
     overflow: hidden;
 }
 
 .terminal-modal-panel.is-expanded {
     width: min(1520px, 98vw);
+    height: min(920px, 94vh);
     max-height: 94vh;
 }
 
@@ -1519,7 +1531,7 @@ th.time-cell .sort-header {
     height: 100%;
     max-height: none;
     border-radius: 0;
-    padding: 20px;
+    padding: 0;
     resize: none;
 }
 
@@ -1537,12 +1549,29 @@ th.time-cell .sort-header {
     border-bottom: 1px solid var(--glass-border);
 }
 
+.terminal-modal-panel .modal-header {
+    margin: 0;
+    padding: 12px 14px;
+    background: var(--bg-card);
+}
+
 .modal-actions {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
     justify-content: flex-end;
+}
+
+.terminal-modal-panel .modal-actions {
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.terminal-modal-panel .modal-actions .btn:not(.btn-icon) {
+    min-height: 32px;
+    padding: 0 10px;
+    gap: 6px;
 }
 
 .modal-header h3 {
@@ -1556,6 +1585,12 @@ th.time-cell .sort-header {
     align-items: center;
     gap: 10px;
     min-width: 0;
+}
+
+.terminal-title-wrap h3 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .window-controls {
@@ -1628,21 +1663,23 @@ th.time-cell .sort-header {
 .terminal-shell-pill {
     display: inline-flex;
     align-items: center;
-    padding: 3px 8px;
-    border-radius: 999px;
-    border: 1px solid rgba(96, 165, 250, 0.28);
-    background: rgba(59, 130, 246, 0.14);
-    color: #93c5fd;
+    padding: 8px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass);
+    color: var(--text-muted);
     font-size: 0.74rem;
     font-family: var(--font-mono);
 }
 
 .terminal-theme-select {
     border: 1px solid var(--glass-border);
-    border-radius: 10px;
-    padding: 8px 10px;
+    border-radius: 8px;
+    min-height: 32px;
+    padding: 0 28px 0 10px;
     background: var(--glass);
     color: var(--text-main);
+    font-size: 0.82rem;
 }
 
 .modal-actions .is-active {
@@ -1653,16 +1690,16 @@ th.time-cell .sort-header {
 .terminal-output {
     height: 60vh;
     min-height: 360px;
+    width: 100%;
     margin: 0;
-    border-radius: 8px;
+    border-radius: 0;
     border: 1px solid var(--glass-border);
-    background:
-        radial-gradient(circle at top right, rgba(37, 99, 235, 0.08), transparent 22%),
-        linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98));
+    background: var(--bg-card);
 }
 
 .log-output {
     padding: 12px;
+    border-radius: 8px;
     overflow: auto;
     color: var(--code-text);
     font-family: var(--font-mono);
@@ -1673,16 +1710,23 @@ th.time-cell .sort-header {
 }
 
 .terminal-xterm {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    border-width: 0;
     overflow: hidden;
 }
 
 .terminal-modal-panel.is-fullscreen .terminal-output {
-    height: calc(100vh - 120px);
+    flex: 1 1 auto;
+    height: calc(100vh - 57px);
 }
 
 .terminal-xterm :deep(.xterm) {
+    width: 100%;
     height: 100%;
-    padding: 10px 12px;
+    padding: 14px 16px;
+    background: transparent !important;
 }
 
 .terminal-xterm :deep(.xterm-screen) {

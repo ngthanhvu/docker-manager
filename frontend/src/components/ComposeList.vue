@@ -73,6 +73,8 @@ const logsSearchQuery = ref('');
 const selectedLogService = ref('all');
 const logsFollow = ref(true);
 const activeWorkspaceView = ref<ComposeWorkspaceView>('compose');
+const workspaceCollapsed = ref(false);
+const workspaceExpanded = ref(false);
 const serviceActionLoadingId = ref('');
 const splitRoot = ref<HTMLElement | null>(null);
 let splitDragging = false;
@@ -393,6 +395,21 @@ const jumpToLatestLogs = async () => {
     if (logsPanel.value) logsPanel.value.scrollTop = logsPanel.value.scrollHeight;
 };
 
+const toggleWorkspaceCollapsed = () => {
+    workspaceCollapsed.value = !workspaceCollapsed.value;
+    if (workspaceCollapsed.value) workspaceExpanded.value = false;
+};
+
+const normalizeWorkspace = () => {
+    workspaceCollapsed.value = false;
+    workspaceExpanded.value = false;
+};
+
+const expandWorkspace = () => {
+    workspaceCollapsed.value = false;
+    workspaceExpanded.value = true;
+};
+
 const stopSplitDrag = () => {
     splitDragging = false;
     document.body.style.cursor = '';
@@ -706,7 +723,6 @@ watch(selectedFilePath, () => {
                 <h3>{{ t('compose.title') }}</h3>
                 <button class="btn btn-ghost compact-btn" @click="fetchProjects">
                     <RefreshCw :size="16" :class="{ 'animate-spin': loadingProjects }" />
-                    {{ t('compose.refresh') }}
                 </button>
             </div>
 
@@ -739,19 +755,19 @@ watch(selectedFilePath, () => {
                     </div>
                     <div class="actions">
                         <div class="action-cluster">
-                            <button class="btn btn-ghost action-btn" :title="t('compose.start')"
+                            <button class="btn btn-ghost" :title="t('compose.start')"
                                 @click="runAction('start', selectedProject.name)">
                                 <Play :size="16" />
                             </button>
-                            <button class="btn btn-ghost action-btn" :title="t('compose.stop')"
+                            <button class="btn btn-ghost" :title="t('compose.stop')"
                                 @click="runAction('stop', selectedProject.name)">
                                 <Square :size="16" />
                             </button>
-                            <button class="btn btn-ghost action-btn" :title="t('compose.restart')"
+                            <button class="btn btn-ghost" :title="t('compose.restart')"
                                 @click="runAction('restart', selectedProject.name)">
                                 <RotateCw :size="16" />
                             </button>
-                            <button class="btn btn-ghost action-btn"
+                            <button class="btn btn-ghost"
                                 @click="reloadDetailsWithGuard(selectedProject.name, t('compose.discardReload'))">
                                 <RefreshCw :size="16" />
                             </button>
@@ -794,20 +810,17 @@ watch(selectedFilePath, () => {
                                                 :disabled="serviceActionLoadingId === service.id || service.state === 'running'"
                                                 @click="runServiceAction('start', service)">
                                                 <Play :size="14" />
-                                                {{ t('compose.start') }}
                                             </button>
                                             <button class="btn btn-ghost compact-btn"
                                                 :disabled="serviceActionLoadingId === service.id || service.state !== 'running'"
                                                 @click="runServiceAction('stop', service)">
                                                 <Square :size="14" />
-                                                {{ t('compose.stop') }}
                                             </button>
                                             <button class="btn btn-ghost compact-btn"
                                                 :disabled="serviceActionLoadingId === service.id"
                                                 @click="runServiceAction('restart', service)">
                                                 <RotateCw :size="14"
                                                     :class="{ 'animate-spin': serviceActionLoadingId === service.id }" />
-                                                {{ t('compose.restart') }}
                                             </button>
                                         </div>
                                     </td>
@@ -828,10 +841,22 @@ watch(selectedFilePath, () => {
                     </button>
                 </div>
 
-                <div ref="splitRoot" class="split split-single">
-                    <div v-if="activeWorkspaceView === 'compose'" class="panel">
+                <div ref="splitRoot" class="split split-single" :class="{ 'is-workspace-expanded': workspaceExpanded }">
+                    <div v-if="activeWorkspaceView === 'compose'" class="panel"
+                        :class="{ 'is-collapsed': workspaceCollapsed, 'is-expanded': workspaceExpanded }">
                         <div class="panel-head">
                             <div class="compose-files-head">
+                                <div class="panel-window-controls" aria-label="Workspace panel controls">
+                                    <button class="panel-window-dot is-close" type="button"
+                                        :aria-label="workspaceCollapsed ? 'Open panel' : 'Collapse panel'"
+                                        :title="workspaceCollapsed ? 'Open panel' : 'Collapse panel'"
+                                        @click="toggleWorkspaceCollapsed"></button>
+                                    <button class="panel-window-dot is-minimize" type="button"
+                                        aria-label="Normal panel size" title="Normal panel size"
+                                        @click="normalizeWorkspace"></button>
+                                    <button class="panel-window-dot is-zoom" type="button" aria-label="Expand panel"
+                                        title="Expand panel" @click="expandWorkspace"></button>
+                                </div>
                                 <h4>{{ t('compose.composeFiles') }}</h4>
                                 <span v-if="isDraftChanged" class="dirty-badge">{{ t('compose.unsavedChanges') }}</span>
                             </div>
@@ -859,7 +884,7 @@ watch(selectedFilePath, () => {
                                     <div class="file-path-meta">
                                         <span class="file-chip"
                                             :class="{ 'file-chip-env': selectedFile.kind === 'env' }">{{
-                                            getFileKindLabel(selectedFile) }}</span>
+                                                getFileKindLabel(selectedFile) }}</span>
                                         <span>{{ getEditorTitle(selectedFile) }}</span>
                                     </div>
                                     <div v-if="selectedFile" class="editor-actions editor-actions-inline">
@@ -867,23 +892,19 @@ watch(selectedFilePath, () => {
                                             :disabled="!isDraftChanged || !selectedFileIsEditable || !!composeValidationError || validatingCompose"
                                             @click="showingDiffPreview = true">
                                             <Eye :size="14" />
-                                            {{ t('compose.previewDiff') }}
                                         </button>
                                         <button class="btn btn-ghost compact-btn"
                                             :disabled="!isDraftChanged || savingFile || !selectedFileIsEditable"
                                             @click="resetDraft">
                                             <X :size="14" />
-                                            {{ t('common.reset') }}
                                         </button>
                                         <button class="btn btn-primary compact-btn" :disabled="!canSaveCompose"
                                             @click="() => saveSelectedFile()">
                                             <Save :size="14" :class="{ 'animate-spin': savingFile }" />
-                                            {{ t('common.save') }}
                                         </button>
                                         <button class="btn btn-ghost compact-btn save-restart-btn"
                                             :disabled="!canSaveCompose" @click="saveSelectedFile(true)">
                                             <RotateCw :size="14" :class="{ 'animate-spin': restartingAfterSave }" />
-                                            {{ t('compose.saveAndRestart') }}
                                         </button>
                                     </div>
                                 </div>
@@ -908,9 +929,23 @@ watch(selectedFilePath, () => {
                         </div>
                     </div>
 
-                    <div v-else class="panel">
+                    <div v-else class="panel"
+                        :class="{ 'is-collapsed': workspaceCollapsed, 'is-expanded': workspaceExpanded }">
                         <div class="panel-head">
-                            <h4>{{ t('compose.logs') }}</h4>
+                            <div class="compose-files-head">
+                                <div class="panel-window-controls" aria-label="Workspace panel controls">
+                                    <button class="panel-window-dot is-close" type="button"
+                                        :aria-label="workspaceCollapsed ? 'Open panel' : 'Collapse panel'"
+                                        :title="workspaceCollapsed ? 'Open panel' : 'Collapse panel'"
+                                        @click="toggleWorkspaceCollapsed"></button>
+                                    <button class="panel-window-dot is-minimize" type="button"
+                                        aria-label="Normal panel size" title="Normal panel size"
+                                        @click="normalizeWorkspace"></button>
+                                    <button class="panel-window-dot is-zoom" type="button" aria-label="Expand panel"
+                                        title="Expand panel" @click="expandWorkspace"></button>
+                                </div>
+                                <h4>{{ t('compose.logs') }}</h4>
+                            </div>
                             <div class="log-controls">
                                 <select v-model="selectedLogService" class="log-control log-service-select">
                                     <option v-for="option in logServiceOptions" :key="option.value"
@@ -1099,6 +1134,11 @@ watch(selectedFilePath, () => {
     flex-wrap: wrap;
 }
 
+.detail-header>div:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
 .detail-header h2 {
     margin: 0;
     font-size: 1.3rem;
@@ -1119,6 +1159,8 @@ watch(selectedFilePath, () => {
     overflow-x: auto;
     padding-bottom: 2px;
     min-width: 0;
+    margin-left: auto;
+    flex: 0 0 auto;
 }
 
 .action-cluster {
@@ -1152,6 +1194,26 @@ watch(selectedFilePath, () => {
     border: 1px solid var(--glass-border);
     border-radius: 10px;
     overflow: hidden;
+    flex: 0 0 auto;
+}
+
+.detail-wrap:has(.panel.is-collapsed) .services-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.detail-wrap:has(.panel.is-collapsed) .services-table-wrap {
+    flex: 1 1 auto;
+    max-height: none;
+    height: 100%;
+    min-height: 0;
+}
+
+.detail-wrap:has(.panel.is-collapsed) .split {
+    flex: 0 0 auto;
+    margin-top: auto;
 }
 
 .services-head {
@@ -1276,6 +1338,25 @@ watch(selectedFilePath, () => {
     overflow: hidden;
 }
 
+.panel.is-collapsed {
+    flex: 0 0 auto;
+}
+
+.panel.is-collapsed .panel-body,
+.panel.is-collapsed .log-controls,
+.panel.is-collapsed .hint {
+    display: none;
+}
+
+.panel.is-expanded {
+    min-height: min(720px, calc(100vh - 260px));
+}
+
+.panel.is-expanded .editor-shell,
+.panel.is-expanded .editor {
+    min-height: min(620px, calc(100vh - 360px));
+}
+
 .splitter {
     position: relative;
     min-width: 10px;
@@ -1331,6 +1412,49 @@ watch(selectedFilePath, () => {
     align-items: center;
     gap: 8px;
     min-width: 0;
+}
+
+.panel-window-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    padding-right: 2px;
+}
+
+.panel-window-dot {
+    width: 12px;
+    height: 12px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    cursor: pointer;
+    padding: 0;
+    transition: filter 0.16s ease, transform 0.16s ease;
+}
+
+.panel-window-dot:hover {
+    filter: brightness(0.96);
+    transform: scale(1.08);
+}
+
+.panel-window-dot:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary) 48%, transparent);
+    outline-offset: 2px;
+}
+
+.panel-window-dot.is-close {
+    background: #ff5f57;
+    border-color: #e2463f;
+}
+
+.panel-window-dot.is-minimize {
+    background: #febc2e;
+    border-color: #e3a520;
+}
+
+.panel-window-dot.is-zoom {
+    background: #28c840;
+    border-color: #20a934;
 }
 
 .dirty-badge {
@@ -1544,9 +1668,7 @@ watch(selectedFilePath, () => {
     position: relative;
     flex: 1;
     min-height: 540px;
-    background:
-        linear-gradient(180deg, rgba(37, 99, 235, 0.06), transparent 18%),
-        var(--code-bg);
+    background: var(--code-bg);
 }
 
 .editor-highlight,
@@ -1565,7 +1687,7 @@ watch(selectedFilePath, () => {
 
 .editor-highlight {
     pointer-events: none;
-    color: #d8dee9;
+    color: var(--code-text);
 }
 
 .editor {
@@ -1576,36 +1698,36 @@ watch(selectedFilePath, () => {
     width: 100%;
     color: transparent;
     background: transparent;
-    caret-color: #f8fafc;
+    caret-color: var(--code-caret);
     -webkit-text-fill-color: transparent;
 }
 
 .editor::selection {
-    background: rgba(96, 165, 250, 0.22);
+    background: var(--code-selection);
 }
 
 .editor-highlight :deep(.tok-key) {
-    color: #7dd3fc;
+    color: var(--code-token-key);
 }
 
 .editor-highlight :deep(.tok-punc) {
-    color: #94a3b8;
+    color: var(--code-token-punc);
 }
 
 .editor-highlight :deep(.tok-string) {
-    color: #86efac;
+    color: var(--code-token-string);
 }
 
 .editor-highlight :deep(.tok-comment) {
-    color: #64748b;
+    color: var(--code-token-comment);
 }
 
 .editor-highlight :deep(.tok-number) {
-    color: #f9a8d4;
+    color: var(--code-token-number);
 }
 
 .editor-highlight :deep(.tok-bool) {
-    color: #fbbf24;
+    color: var(--code-token-bool);
 }
 
 .editor-actions {
@@ -1919,25 +2041,152 @@ watch(selectedFilePath, () => {
 
 @media (max-width: 1320px) {
     .compose-layout {
-        grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
-        gap: 12px;
+        grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
+        gap: 10px;
+        height: calc(100vh - 116px);
     }
 
     .left-col,
     .right-col {
-        padding: 12px;
+        padding: 10px;
+    }
+
+    .left-col {
+        gap: 8px;
+    }
+
+    .left-header h3 {
+        font-size: 1rem;
+    }
+
+    .compact-btn {
+        min-height: 30px;
+        padding: 5px 8px;
+        font-size: 0.74rem;
+        gap: 5px;
+    }
+
+    .compact-btn :deep(svg) {
+        width: 13px;
+        height: 13px;
+    }
+
+    .search-box {
+        padding: 6px 8px;
+    }
+
+    .project-list {
+        gap: 6px;
+    }
+
+    .project-item {
+        border-radius: 8px;
+        padding: 8px;
+    }
+
+    .row-1 {
+        gap: 8px;
+    }
+
+    .row-2,
+    .path,
+    .hint {
+        font-size: 0.74rem;
+    }
+
+    .detail-wrap {
+        gap: 10px;
+    }
+
+    .detail-header h2 {
+        font-size: 1.08rem;
+    }
+
+    .action-cluster {
+        gap: 6px;
+    }
+
+    .action-btn {
+        padding: 5px 8px;
+        font-size: 0.74rem;
+    }
+
+    .services-table-wrap {
+        max-height: 104px;
+    }
+
+    .services-table th,
+    .services-table td {
+        padding: 7px 9px;
+        font-size: 0.76rem;
+    }
+
+    .service-actions-col {
+        width: 190px;
+    }
+
+    .service-actions {
+        gap: 4px;
+    }
+
+    .workspace-toggle {
+        padding: 3px;
+    }
+
+    .workspace-toggle-btn {
+        padding: 6px 10px;
+        font-size: 0.78rem;
+    }
+
+    .panel-head {
+        padding: 8px 10px;
+        gap: 8px;
+    }
+
+    .panel-body {
+        padding: 8px;
+    }
+
+    .file-body {
+        gap: 10px;
+    }
+
+    .file-editor-layout {
+        grid-template-columns: minmax(150px, 180px) minmax(0, 1fr);
+        gap: 8px;
+    }
+
+    .file-list {
+        padding: 6px;
+    }
+
+    .file-item-btn {
+        padding: 6px;
+    }
+
+    .file-path {
+        padding: 8px 10px;
+    }
+
+    .code,
+    .logs,
+    .diff-view {
+        font-size: 0.76rem;
     }
 
     .detail-header {
-        align-items: stretch;
+        align-items: flex-start;
     }
 
     .actions {
-        width: 100%;
+        max-width: min(460px, 48vw);
+        width: auto;
+        justify-content: flex-end;
     }
 
     .split {
         grid-template-columns: 1fr;
+        gap: 10px;
     }
 
     .splitter {
@@ -1946,7 +2195,38 @@ watch(selectedFilePath, () => {
 
     .editor-shell,
     .editor {
-        min-height: 420px;
+        min-height: 320px;
+    }
+
+    .editor-highlight,
+    .editor {
+        padding: 10px 12px;
+        font-size: 0.76rem;
+    }
+
+    .log-controls {
+        gap: 4px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 2px;
+    }
+
+    .log-controls input,
+    .log-controls select {
+        min-height: 28px;
+        font-size: 0.74rem;
+    }
+
+    .log-service-select {
+        width: 116px;
+    }
+
+    .log-search {
+        width: 140px;
+    }
+
+    .log-tail-input {
+        width: 52px;
     }
 }
 </style>

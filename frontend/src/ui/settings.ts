@@ -20,7 +20,7 @@ export type AppSettings = {
         apiBaseUrl: string;
         defaultLogTail: number;
         terminalShell: '/bin/sh' | '/bin/bash';
-        terminalTheme: 'ocean' | 'matrix' | 'amber';
+        terminalTheme: 'system' | 'light' | 'dark';
         terminalFontSize: number;
         composeRefreshMs: number;
     };
@@ -60,7 +60,7 @@ const defaults: AppSettings = {
         apiBaseUrl: 'http://localhost:8080',
         defaultLogTail: 300,
         terminalShell: '/bin/sh',
-        terminalTheme: 'ocean',
+        terminalTheme: 'system',
         terminalFontSize: 13,
         composeRefreshMs: 5000,
     },
@@ -85,7 +85,7 @@ const defaults: AppSettings = {
 };
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
-const terminalThemes = new Set(['ocean', 'matrix', 'amber']);
+const terminalThemes = new Set(['system', 'light', 'dark']);
 
 const normalize = (raw: AppSettings): AppSettings => ({
     ...raw,
@@ -102,9 +102,9 @@ const normalize = (raw: AppSettings): AppSettings => ({
         ...raw.runtime,
         defaultLogTail: clamp(Number(raw.runtime?.defaultLogTail || 300), 50, 5000),
         terminalFontSize: clamp(Number(raw.runtime?.terminalFontSize || 13), 11, 20),
-        terminalTheme: terminalThemes.has(String(raw.runtime?.terminalTheme || 'ocean'))
-            ? raw.runtime.terminalTheme as 'ocean' | 'matrix' | 'amber'
-            : 'ocean',
+        terminalTheme: terminalThemes.has(String(raw.runtime?.terminalTheme || 'system'))
+            ? raw.runtime.terminalTheme as 'system' | 'light' | 'dark'
+            : 'system',
         composeRefreshMs: Number(raw.runtime?.composeRefreshMs || 5000),
     },
     notifications: {

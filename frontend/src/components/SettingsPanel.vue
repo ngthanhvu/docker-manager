@@ -22,6 +22,12 @@ const summaryCards = computed(() => [
   { label: t('settings.appVersion'), value: formatVersion(appSettings.about.appVersion) },
   { label: t('settings.buildDate'), value: appSettings.about.buildDate },
 ]);
+const fontScaleRangeStyle = computed<Record<string, string>>(() => {
+  const min = 0.9;
+  const max = 1.15;
+  const percent = ((appSettings.ui.fontScale - min) / (max - min)) * 100;
+  return { '--range-fill': `${Math.min(100, Math.max(0, percent))}%` };
+});
 
 const updateState = updates.state;
 
@@ -88,10 +94,6 @@ const checkUpdates = async (silent = false) => {
   }
 };
 
-const openUpdatePage = () => {
-  updates.openUpdateUrl();
-};
-
 const applyUpdate = async () => {
   const accepted = await feedback.confirmAction({
     title: t('common.pleaseConfirm'),
@@ -120,29 +122,29 @@ const applyUpdate = async () => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
+  <div class="settings-view flex flex-col gap-4">
     <section>
-      <div class="glass-panel p-6">
-        <p class="section-heading">{{ t('settings.title') }}</p>
-        <h2 class="max-w-3xl text-3xl font-semibold tracking-tight">{{ t('settings.title') }}</h2>
-        <p class="mt-3 max-w-2xl text-sm leading-7" style="color: var(--text-muted);">
-          {{ t('settings.subtitle') }}
-        </p>
+      <div class="glass-panel settings-hero">
+        <div class="min-w-0">
+          <h2 class="settings-title">{{ t('settings.title') }}</h2>
+          <p class="settings-subtitle">
+            {{ t('settings.subtitle') }}
+          </p>
+        </div>
 
-        <div class="mt-6 grid gap-3 sm:grid-cols-2">
-          <div v-for="card in summaryCards" :key="card.label" class="border p-4"
-            style="border-color: var(--glass-border); background: var(--glass);">
-            <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{ card.label }}</p>
-            <p class="mt-2 text-2xl font-semibold">{{ card.value }}</p>
+        <div class="settings-summary">
+          <div v-for="card in summaryCards" :key="card.label" class="settings-summary-card">
+            <p>{{ card.label }}</p>
+            <strong>{{ card.value }}</strong>
           </div>
         </div>
       </div>
     </section>
 
-    <div class="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      <section class="glass-panel p-5">
+    <div class="settings-grid">
+      <section class="glass-panel settings-section">
         <p class="section-heading">{{ t('settings.general') }}</p>
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class="settings-fields">
           <label class="block lg:col-span-2">
             <span class="mb-2 block text-sm font-semibold">{{ t('settings.autoRefresh') }}</span>
             <select v-model.number="appSettings.general.autoRefreshMs" class="app-select">
@@ -152,7 +154,7 @@ const applyUpdate = async () => {
               <option :value="10000">10s</option>
             </select>
             <small class="mt-2 block text-xs" style="color: var(--text-muted);">{{ t('settings.autoRefreshHelp')
-            }}</small>
+              }}</small>
           </label>
 
           <label class="settings-switch-row">
@@ -163,8 +165,8 @@ const applyUpdate = async () => {
             </span>
           </label>
 
-          <label class="block">
-            <span class="mb-2 block text-sm font-semibold">{{ t('settings.timeFormat') }}</span>
+          <label class="settings-control-row">
+            <span>{{ t('settings.timeFormat') }}</span>
             <select v-model="appSettings.general.timeFormat" class="app-select">
               <option value="24h">{{ t('settings.hour24') }}</option>
               <option value="12h">{{ t('settings.hour12') }}</option>
@@ -173,9 +175,9 @@ const applyUpdate = async () => {
         </div>
       </section>
 
-      <section class="glass-panel p-5">
+      <section class="glass-panel settings-section">
         <p class="section-heading">{{ t('settings.interface') }}</p>
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class="settings-fields">
           <label class="block lg:col-span-2">
             <span class="mb-2 block text-sm font-semibold">{{ t('settings.density') }}</span>
             <select v-model="appSettings.ui.density" class="app-select">
@@ -187,9 +189,9 @@ const applyUpdate = async () => {
           <label class="block lg:col-span-2">
             <span class="mb-2 block text-sm font-semibold">{{ t('settings.fontScale') }} ({{
               appSettings.ui.fontScale.toFixed(2) }})</span>
-            <div class="border px-4 py-4" style="border-color: var(--glass-border); background: var(--glass);">
+            <div class="settings-range-box">
               <input v-model.number="appSettings.ui.fontScale" type="range" min="0.9" max="1.15" step="0.01"
-                class="w-full accent-blue-600" />
+                class="settings-range-input" :style="fontScaleRangeStyle" />
             </div>
           </label>
 
@@ -203,9 +205,9 @@ const applyUpdate = async () => {
         </div>
       </section>
 
-      <section class="glass-panel p-5">
+      <section class="glass-panel settings-section">
         <p class="section-heading">{{ t('settings.runtime') }}</p>
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class="settings-fields">
           <label class="block lg:col-span-2">
             <span class="mb-2 block text-sm font-semibold">{{ t('settings.dockerApiEndpoint') }}</span>
             <input v-model.trim="appSettings.runtime.apiBaseUrl" type="text" placeholder="http://localhost:8080"
@@ -232,9 +234,9 @@ const applyUpdate = async () => {
           <label class="block">
             <span class="mb-2 block text-sm font-semibold">{{ t('settings.terminalTheme') }}</span>
             <select v-model="appSettings.runtime.terminalTheme" class="app-select">
-              <option value="ocean">{{ t('settings.themeOcean') }}</option>
-              <option value="matrix">{{ t('settings.themeMatrix') }}</option>
-              <option value="amber">{{ t('settings.themeAmber') }}</option>
+              <option value="system">{{ t('settings.themeSystem') }}</option>
+              <option value="light">{{ t('settings.themeLight') }}</option>
+              <option value="dark">{{ t('settings.themeDark') }}</option>
             </select>
           </label>
 
@@ -256,15 +258,15 @@ const applyUpdate = async () => {
         </div>
       </section>
 
-      <section class="glass-panel p-5">
-        <div class="mb-4 flex items-center justify-between gap-4">
+      <section class="glass-panel settings-section">
+        <div class="settings-section-head">
           <p class="section-heading mb-0">{{ t('settings.updates') }}</p>
-          <span class="border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]" :style="updateStatusTone">
+          <span class="settings-status-pill" :style="updateStatusTone">
             {{ statusLabel }}
           </span>
         </div>
 
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class="settings-fields">
           <label class="settings-switch-row lg:col-span-2">
             <span class="text-sm font-semibold">{{ t('settings.autoCheckUpdates') }}</span>
             <span class="settings-switch">
@@ -285,36 +287,36 @@ const applyUpdate = async () => {
               placeholder="docker-manager" />
           </label>
 
-          <div class="border p-4 lg:col-span-2" style="border-color: var(--glass-border); background: var(--glass);">
-            <div class="grid gap-3 sm:grid-cols-2">
+          <div class="settings-update-card lg:col-span-2">
+            <div class="settings-update-grid">
               <div>
-                <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
+                <p>{{
                   t('settings.currentVersion') }}</p>
-                <p class="mt-2 text-xl font-semibold">{{ formatVersion(updateState.currentVersion) }}</p>
+                <strong>{{ formatVersion(updateState.currentVersion) }}</strong>
               </div>
               <div>
-                <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
+                <p>{{
                   t('settings.latestVersion') }}</p>
-                <p class="mt-2 text-xl font-semibold">{{ formatVersion(updateState.latestVersion) }}</p>
+                <strong>{{ formatVersion(updateState.latestVersion) }}</strong>
               </div>
               <div>
-                <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
+                <p>{{
                   t('settings.lastChecked') }}</p>
-                <p class="mt-2 text-sm font-medium">{{ checkedAtLabel }}</p>
+                <span>{{ checkedAtLabel }}</span>
               </div>
               <div>
-                <p class="text-[11px] font-medium uppercase tracking-[0.08em]" style="color: var(--text-muted);">{{
+                <p>{{
                   t('settings.latestPublished') }}</p>
-                <p class="mt-2 text-sm font-medium">{{ releaseDateLabel }}</p>
+                <span>{{ releaseDateLabel }}</span>
               </div>
             </div>
 
-            <p class="mt-4 text-sm leading-6" style="color: var(--text-muted);">
+            <p class="settings-update-message">
               {{ updateState.message || t('settings.updateHelp') }}
             </p>
           </div>
 
-          <div class="flex flex-wrap gap-3 lg:col-span-2">
+          <div class="settings-actions lg:col-span-2">
             <button class="btn btn-ghost" type="button" :disabled="updateState.status === 'checking'"
               @click="checkUpdates()">
               {{ updateState.status === 'checking' ? t('settings.updateChecking') : t('settings.checkUpdates') }}
@@ -328,17 +330,13 @@ const applyUpdate = async () => {
               @click="openUpdateConsole">
               {{ t('settings.openUpdateConsole') }}
             </button>
-            <button class="btn btn-ghost" type="button" :disabled="updateState.status === 'checking'"
-              @click="openUpdatePage">
-              {{ t('settings.openUpdatePage') }}
-            </button>
           </div>
         </div>
       </section>
 
-      <section class="glass-panel p-5">
+      <section class="glass-panel settings-section">
         <p class="section-heading">{{ t('settings.notifications') }}</p>
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div class="settings-fields">
           <label class="block lg:col-span-2">
             <span class="mb-2 block text-sm font-semibold">{{ t('settings.toastDuration') }}</span>
             <input v-model.number="appSettings.notifications.toastDurationMs" type="number" min="1000" max="10000"
@@ -365,9 +363,9 @@ const applyUpdate = async () => {
         </div>
       </section>
 
-      <section class="glass-panel p-5">
+      <section class="glass-panel settings-section">
         <p class="section-heading">{{ t('settings.safety') }}</p>
-        <div class="grid gap-4">
+        <div class="settings-fields settings-fields-single">
           <label class="settings-switch-row">
             <span class="text-sm font-semibold">{{ t('settings.requireDeleteTyping') }}</span>
             <span class="settings-switch">
@@ -385,22 +383,21 @@ const applyUpdate = async () => {
         </div>
       </section>
 
-      <section class="glass-panel p-5">
+      <section class="glass-panel settings-section">
         <p class="section-heading">{{ t('settings.about') }}</p>
-        <div class="grid gap-px border text-sm sm:grid-cols-[220px_minmax(0,1fr)]"
-          style="border-color: var(--glass-border); background: var(--glass-border);">
-          <div class="px-4 py-3 font-semibold" style="background: var(--table-header-bg);">{{ t('settings.appVersion')
-          }}</div>
-          <div class="px-4 py-3" style="background: var(--bg-card);">{{ formatVersion(appSettings.about.appVersion) }}</div>
-          <div class="px-4 py-3 font-semibold" style="background: var(--table-header-bg);">{{ t('settings.buildDate') }}
+        <div class="settings-about-table">
+          <div>{{ t('settings.appVersion')
+            }}</div>
+          <div>{{ formatVersion(appSettings.about.appVersion) }}</div>
+          <div>{{ t('settings.buildDate') }}
           </div>
-          <div class="px-4 py-3" style="background: var(--bg-card);">{{ appSettings.about.buildDate }}</div>
-          <div class="px-4 py-3 font-semibold" style="background: var(--table-header-bg);">{{ t('settings.engine') }}
+          <div>{{ appSettings.about.buildDate }}</div>
+          <div>{{ t('settings.engine') }}
           </div>
-          <div class="px-4 py-3" style="background: var(--bg-card);">{{ props.systemInfo?.ServerVersion ||
+          <div>{{ props.systemInfo?.ServerVersion ||
             t('common.notAvailable') }}</div>
-          <div class="px-4 py-3 font-semibold" style="background: var(--table-header-bg);">{{ t('settings.os') }}</div>
-          <div class="px-4 py-3" style="background: var(--bg-card);">{{ props.systemInfo?.OperatingSystem ||
+          <div>{{ t('settings.os') }}</div>
+          <div>{{ props.systemInfo?.OperatingSystem ||
             t('common.notAvailable') }}</div>
         </div>
       </section>
@@ -410,22 +407,326 @@ const applyUpdate = async () => {
 </template>
 
 <style scoped>
+.settings-view {
+  max-width: 1480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.settings-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+}
+
+.settings-title {
+  margin: 0;
+  font-size: clamp(1.2rem, 1.5vw, 1.6rem);
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.settings-subtitle {
+  margin: 6px 0 0;
+  max-width: 760px;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.settings-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(128px, 1fr));
+  gap: 8px;
+  width: min(360px, 42vw);
+  flex: 0 0 auto;
+}
+
+.settings-summary-card {
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass);
+  padding: 10px 12px;
+  min-width: 0;
+}
+
+.settings-summary-card p,
+.settings-update-grid p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.settings-summary-card strong {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 0.98rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-section {
+  padding: 14px;
+  min-width: 0;
+}
+
+.settings-section :deep(.section-heading),
+.settings-section>.section-heading {
+  margin-bottom: 12px;
+}
+
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.settings-fields-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.settings-fields label {
+  min-width: 0;
+}
+
+.settings-fields label>span:first-child {
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.settings-fields small {
+  margin-top: 6px;
+  line-height: 1.45;
+}
+
+.settings-fields :deep(.app-input),
+.settings-fields :deep(.app-select),
+.settings-fields .app-input,
+.settings-fields .app-select {
+  min-height: 34px;
+  border-radius: 7px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  font-size: 0.84rem;
+}
+
+.settings-range-box {
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass);
+  padding: 10px 14px;
+}
+
+.settings-range-input {
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--primary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-range-input::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--glass-border));
+  border-radius: 999px;
+  background:
+    linear-gradient(var(--primary), var(--primary)) 0 / var(--range-fill, 50%) 100% no-repeat,
+    color-mix(in srgb, var(--primary) 8%, var(--glass));
+}
+
+.settings-range-input::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 2px solid var(--bg-card);
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--primary) 34%, transparent);
+}
+
+.settings-range-input::-moz-range-track {
+  height: 6px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--glass-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--glass));
+}
+
+.settings-range-input::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.settings-range-input::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--bg-card);
+  border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--primary) 34%, transparent);
+}
+
+.settings-range-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  outline-offset: 4px;
+}
+
+.settings-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.settings-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.settings-update-card {
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass);
+  padding: 12px;
+}
+
+.settings-update-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-update-grid strong,
+.settings-update-grid span {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--text-main);
+  font-size: 0.86rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-update-message {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-actions .btn {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 0.82rem;
+}
+
+.settings-about-table {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass-border);
+  gap: 1px;
+  font-size: 0.82rem;
+}
+
+.settings-about-table>div {
+  min-width: 0;
+  padding: 9px 11px;
+  background: var(--bg-card);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-about-table>div:nth-child(odd) {
+  background: var(--table-header-bg);
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
 .settings-switch-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   border: 1px solid var(--glass-border);
-  padding: 12px 16px;
+  border-radius: 8px;
+  padding: 9px 11px;
   background: var(--glass);
+}
+
+.settings-control-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 4px 11px;
+  background: var(--glass);
+}
+
+.settings-control-row>span {
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.settings-control-row .app-select {
+  min-height: 34px;
+}
+
+.settings-switch-row>span:first-child {
+  min-width: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .settings-switch {
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 52px;
-  height: 30px;
+  width: 42px;
+  height: 24px;
   flex-shrink: 0;
 }
 
@@ -450,10 +751,10 @@ const applyUpdate = async () => {
 .settings-switch-track::after {
   content: '';
   position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 22px;
-  height: 22px;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background: #f8fafc;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.28);
@@ -466,7 +767,7 @@ const applyUpdate = async () => {
 }
 
 .settings-switch-input:checked+.settings-switch-track::after {
-  transform: translateX(22px);
+  transform: translateX(18px);
 }
 
 .settings-switch-input:focus-visible+.settings-switch-track {
@@ -474,4 +775,58 @@ const applyUpdate = async () => {
   outline-offset: 2px;
 }
 
+@media (max-width: 1320px) {
+  .settings-view {
+    gap: 12px;
+  }
+
+  .settings-grid {
+    gap: 12px;
+  }
+
+  .settings-section {
+    padding: 12px;
+  }
+
+  .settings-update-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1020px) {
+
+  .settings-grid,
+  .settings-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-hero {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-summary {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+
+  .settings-hero,
+  .settings-section {
+    padding: 11px;
+  }
+
+  .settings-summary,
+  .settings-update-grid,
+  .settings-about-table {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-status-pill {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 </style>
