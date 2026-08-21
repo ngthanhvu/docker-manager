@@ -242,13 +242,13 @@ watch(() => appSettings.general.autoRefreshMs, () => {
                 style="border-color: var(--glass-border); background: var(--glass); border-radius: var(--radius-control);">
                 <button class="grid h-7 w-9 place-items-center transition cursor-pointer" type="button"
                   :title="t('settings.dark')" :aria-label="t('settings.dark')" :style="appSettings.ui.theme === 'dark'
-                    ? 'background: var(--primary); color: white; border-radius: 4px;'
+                    ? 'background: var(--primary); color: var(--primary-foreground); border-radius: 4px;'
                     : 'background: transparent; color: var(--text-main);'" @click="appSettings.ui.theme = 'dark'">
                   <Moon :size="17" />
                 </button>
                 <button class="grid h-7 w-9 place-items-center transition cursor-pointer" type="button"
                   :title="t('settings.light')" :aria-label="t('settings.light')" :style="appSettings.ui.theme === 'light'
-                    ? 'background: var(--primary); color: white; border-radius: 4px;'
+                    ? 'background: var(--primary); color: var(--primary-foreground); border-radius: 4px;'
                     : 'background: transparent; color: var(--text-main);'" @click="appSettings.ui.theme = 'light'">
                   <Sun :size="17" />
                 </button>

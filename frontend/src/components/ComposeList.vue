@@ -73,7 +73,7 @@ const logsSearchQuery = ref('');
 const selectedLogService = ref('all');
 const logsFollow = ref(true);
 const activeWorkspaceView = ref<ComposeWorkspaceView>('compose');
-const workspaceCollapsed = ref(false);
+const workspaceCollapsed = ref(true);
 const workspaceExpanded = ref(false);
 const serviceActionLoadingId = ref('');
 const splitRoot = ref<HTMLElement | null>(null);
@@ -1319,7 +1319,7 @@ watch(selectedFilePath, () => {
 
 .workspace-toggle-btn.active {
     background: var(--primary);
-    color: #fff;
+    color: var(--primary-foreground);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-hover) 60%, transparent);
 }
 

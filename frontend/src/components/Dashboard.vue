@@ -9,28 +9,16 @@ import {
   Activity,
   ChevronDown,
 } from 'lucide-vue-next';
-import VChart from 'vue-echarts';
-import { use } from 'echarts/core';
-import { CanvasRenderer } from 'echarts/renderers';
-import { LineChart } from 'echarts/charts';
 import {
-  GridComponent,
-  TooltipComponent,
-  DataZoomComponent,
-  LegendComponent,
-} from 'echarts/components';
+  VisXYContainer,
+  VisArea,
+  VisAxis,
+  VisTooltip,
+  VisAreaSelectors,
+} from '@unovis/vue';
 import { appSettings } from '../ui/settings';
 import { dockerApi } from '../api';
 const { t } = useI18n();
-
-use([
-  CanvasRenderer,
-  LineChart,
-  GridComponent,
-  TooltipComponent,
-  DataZoomComponent,
-  LegendComponent,
-]);
 
 const props = defineProps<{
   systemInfo: any;
@@ -247,258 +235,40 @@ const monitoringLegend = computed(() => [
   { label: metricSeries.value.rightLabel, color: metricSeries.value.rightColor },
 ]);
 
-const chartTheme = computed(() => {
-  if (appSettings.ui.theme === 'light') {
-    return {
-      text: 'rgba(22, 22, 22, 0.74)',
-      axisText: 'rgba(22, 22, 22, 0.6)',
-      axisName: 'rgba(22, 22, 22, 0.52)',
-      axisLine: 'rgba(22, 22, 22, 0.18)',
-      splitLine: 'rgba(22, 22, 22, 0.12)',
-      tooltipBg: 'rgba(247, 243, 234, 0.98)',
-      tooltipBorder: 'rgba(22, 22, 22, 0.14)',
-      tooltipText: '#161616',
-      pointerLine: 'rgba(22, 22, 22, 0.4)',
-      zoomBorder: 'rgba(22, 22, 22, 0.18)',
-      zoomBg: 'rgba(22, 22, 22, 0.05)',
-      zoomFill: 'rgba(29, 78, 216, 0.14)',
-      zoomDataLine: 'rgba(22, 22, 22, 0.34)',
-      zoomDataArea: 'rgba(22, 22, 22, 0.06)',
-      zoomSelectedLine: 'rgba(22, 22, 22, 0.72)',
-      zoomSelectedArea: 'rgba(29, 78, 216, 0.08)',
-      zoomHandle: '#1d4ed8',
-      zoomHandleMove: 'rgba(29, 78, 216, 0.74)',
-      pointBorder: '#f7f3ea',
-      shadow: '0 12px 32px rgba(17, 24, 39, 0.14)',
-    };
-  }
+type ChartPoint = {
+  index: number;
+  label: string;
+  left: number;
+  right: number;
+};
 
-  return {
-    text: 'rgba(244, 244, 240, 0.7)',
-    axisText: 'rgba(244, 244, 240, 0.56)',
-    axisName: 'rgba(244, 244, 240, 0.38)',
-    axisLine: 'rgba(244, 244, 240, 0.12)',
-    splitLine: 'rgba(244, 244, 240, 0.08)',
-    tooltipBg: 'rgba(20, 20, 20, 0.96)',
-    tooltipBorder: 'rgba(244, 244, 240, 0.12)',
-    tooltipText: '#f4f4f0',
-    pointerLine: 'rgba(244, 244, 240, 0.46)',
-    zoomBorder: 'rgba(244, 244, 240, 0.12)',
-    zoomBg: 'rgba(255, 255, 255, 0.05)',
-    zoomFill: 'rgba(244, 244, 240, 0.14)',
-    zoomDataLine: 'rgba(244, 244, 240, 0.4)',
-    zoomDataArea: 'rgba(255, 255, 255, 0.08)',
-    zoomSelectedLine: 'rgba(255, 255, 255, 0.9)',
-    zoomSelectedArea: 'rgba(255, 255, 255, 0.08)',
-    zoomHandle: '#f4f4f0',
-    zoomHandleMove: 'rgba(255, 255, 255, 0.8)',
-    pointBorder: '#f8fafc',
-    shadow: '0 12px 32px rgba(0,0,0,0.28)',
-  };
+const chartData = computed<ChartPoint[]>(() => {
+  return metricSeries.value.leftData.map((left, i) => ({
+    index: i,
+    label: labels.value[i] || '',
+    left,
+    right: metricSeries.value.rightData[i] ?? 0,
+  }));
 });
 
-const monitoringChartOption = computed(() => ({
-  animation: true,
-  animationDuration: 280,
-  animationDurationUpdate: 280,
-  backgroundColor: 'transparent',
-  textStyle: {
-    color: chartTheme.value.text,
-    fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-  },
-  grid: {
-    left: 48,
-    right: 18,
-    top: 24,
-    bottom: 74,
-    containLabel: false,
-  },
-  tooltip: {
-    trigger: 'axis',
-    backgroundColor: chartTheme.value.tooltipBg,
-    borderColor: chartTheme.value.tooltipBorder,
-    borderWidth: 1,
-    textStyle: {
-      color: chartTheme.value.tooltipText,
-    },
-    extraCssText: `border-radius:8px; box-shadow: ${chartTheme.value.shadow};`,
-    axisPointer: {
-      type: 'line',
-      lineStyle: {
-        color: chartTheme.value.pointerLine,
-        type: 'dashed',
-      },
-    },
-    valueFormatter: (value: number) => formatRate(Number(value || 0)),
-  },
-  xAxis: {
-    type: 'category',
-    boundaryGap: false,
-    data: labels.value,
-    axisLine: {
-      lineStyle: {
-        color: chartTheme.value.axisLine,
-      },
-    },
-    axisTick: {
-      show: false,
-    },
-    axisLabel: {
-      color: chartTheme.value.axisText,
-      margin: 12,
-      interval: Math.max(0, Math.floor(labels.value.length / 8) - 1),
-    },
-    splitLine: {
-      show: false,
-    },
-  },
-  yAxis: {
-    type: 'value',
-    min: 0,
-    max: maxMetricValue.value,
-    name: `(${metricSeries.value.unit})`,
-    nameTextStyle: {
-      color: chartTheme.value.axisName,
-      padding: [0, 0, 8, -6],
-    },
-    axisLabel: {
-      color: chartTheme.value.axisText,
-      margin: 10,
-    },
-    axisLine: {
-      show: false,
-    },
-    axisTick: {
-      show: false,
-    },
-    splitLine: {
-      lineStyle: {
-        color: chartTheme.value.splitLine,
-        type: 'dashed',
-      },
-    },
-  },
-  dataZoom: [
-    {
-      type: 'slider',
-      height: 34,
-      bottom: 14,
-      left: 28,
-      right: 28,
-      borderColor: chartTheme.value.zoomBorder,
-      backgroundColor: chartTheme.value.zoomBg,
-      fillerColor: chartTheme.value.zoomFill,
-      dataBackground: {
-        lineStyle: {
-          color: chartTheme.value.zoomDataLine,
-        },
-        areaStyle: {
-          color: chartTheme.value.zoomDataArea,
-        },
-      },
-      selectedDataBackground: {
-        lineStyle: {
-          color: chartTheme.value.zoomSelectedLine,
-        },
-        areaStyle: {
-          color: chartTheme.value.zoomSelectedArea,
-        },
-      },
-      handleSize: 20,
-      handleStyle: {
-        color: chartTheme.value.zoomHandle,
-        borderColor: chartTheme.value.zoomHandle,
-        shadowBlur: 0,
-      },
-      moveHandleStyle: {
-        color: chartTheme.value.zoomHandleMove,
-      },
-      textStyle: {
-        color: 'transparent',
-      },
-      brushSelect: false,
-      startValue: Math.max(0, labels.value.length - 12),
-      endValue: Math.max(0, labels.value.length - 1),
-    },
-    {
-      type: 'inside',
-      startValue: Math.max(0, labels.value.length - 12),
-      endValue: Math.max(0, labels.value.length - 1),
-    },
-  ],
-  series: [
-    {
-      name: metricSeries.value.leftLabel,
-      type: 'line',
-      smooth: false,
-      showSymbol: false,
-      symbol: 'circle',
-      symbolSize: 6,
-      lineStyle: {
-        width: 2.2,
-        color: metricSeries.value.leftColor,
-      },
-      itemStyle: {
-        color: metricSeries.value.leftColor,
-        borderColor: chartTheme.value.pointBorder,
-        borderWidth: 2,
-      },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: metricSeries.value.leftAreaStart },
-            { offset: 1, color: metricSeries.value.leftAreaEnd },
-          ],
-        },
-      },
-      emphasis: {
-        focus: 'series',
-      },
-      data: metricSeries.value.leftData,
-      z: 3,
-    },
-    {
-      name: metricSeries.value.rightLabel,
-      type: 'line',
-      smooth: false,
-      showSymbol: false,
-      symbol: 'circle',
-      symbolSize: 6,
-      lineStyle: {
-        width: 2.2,
-        color: metricSeries.value.rightColor,
-      },
-      itemStyle: {
-        color: metricSeries.value.rightColor,
-        borderColor: chartTheme.value.pointBorder,
-        borderWidth: 2,
-      },
-      areaStyle: {
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: metricSeries.value.rightAreaStart },
-            { offset: 1, color: metricSeries.value.rightAreaEnd },
-          ],
-        },
-      },
-      emphasis: {
-        focus: 'series',
-      },
-      data: metricSeries.value.rightData,
-      z: 2,
-    },
-  ],
-}));
+const chartX = (d: ChartPoint) => d.index;
+const chartLeftY = (d: ChartPoint) => d.left;
+const chartRightY = (d: ChartPoint) => d.right;
+
+const xTickFormat = (tick: number | Date) => labels.value[Math.round(Number(tick))] ?? '';
+
+const metricTooltip = (data: any) => {
+  const d = Array.isArray(data) ? data[0] : data;
+  const datum = d?.datum ?? d;
+  if (!datum) return '';
+  const left = formatRate(Number(datum.left || 0));
+  const right = formatRate(Number(datum.right || 0));
+  return `<div style="font-size:0.82rem;line-height:1.5;">
+    <div style="font-weight:600;margin-bottom:4px;">${datum.label}</div>
+    <div style="color:${metricSeries.value.leftColor};">${metricSeries.value.leftLabel}: ${left}</div>
+    <div style="color:${metricSeries.value.rightColor};">${metricSeries.value.rightLabel}: ${right}</div>
+  </div>`;
+};
 
 const fetchMetrics = async () => {
   try {
@@ -547,7 +317,7 @@ watch(activeNetworkInterfaces, (interfaces) => {
         { key: 'containers', label: t('dashboard.containers'), value: `${systemInfo?.ContainersRunning || 0} / ${systemInfo?.Containers || 0}`, detail: t('dashboard.runningTotal'), icon: Container, tone: 'var(--primary)' },
         { key: 'images', label: t('dashboard.images'), value: `${systemInfo?.Images || 0}`, detail: t('dashboard.localArtifacts'), icon: Box, tone: 'var(--success)' },
         { key: 'volumes', label: t('dashboard.volumes'), value: `${volumeCount}`, detail: t('dashboard.dockerVolumes'), icon: HardDrive, tone: 'var(--warning)' },
-        { key: 'networks', label: t('dashboard.networks'), value: `${networkCount}`, detail: t('dashboard.dockerNetworks'), icon: Network, tone: '#58a6ff' },
+        { key: 'networks', label: t('dashboard.networks'), value: `${networkCount}`, detail: t('dashboard.dockerNetworks'), icon: Network, tone: 'var(--primary)' },
       ]" :key="card.key" class="dashboard-summary-card glass-panel p-5">
         <div class="dashboard-summary-head mb-6 flex items-start justify-between gap-4">
           <div>
@@ -602,12 +372,12 @@ watch(activeNetworkInterfaces, (interfaces) => {
           <div class="dashboard-monitor-controls flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <div class="dashboard-mode-toggle inline-flex border" style="border-color: var(--glass-border);">
               <button class="dashboard-mode-btn px-4 py-2 text-sm font-medium"
-                :style="monitorMode === 'network' ? 'background: var(--primary); color: white; border-radius: 5px;' : 'background: var(--glass); color: var(--text-muted);'"
+                :style="monitorMode === 'network' ? 'background: var(--primary); color: var(--primary-foreground); border-radius: 5px;' : 'background: var(--glass); color: var(--text-muted);'"
                 @click="monitorMode = 'network'">
                 {{ t('dashboard.network') }}
               </button>
               <button class="dashboard-mode-btn px-4 py-2 text-sm font-medium"
-                :style="monitorMode === 'disk' ? 'background: var(--primary); color: white; border-radius: 5px;' : 'background: var(--glass); color: var(--text-muted);'"
+                :style="monitorMode === 'disk' ? 'background: var(--primary); color: var(--primary-foreground); border-radius: 5px;' : 'background: var(--glass); color: var(--text-muted);'"
                 @click="monitorMode = 'disk'">
                 {{ t('dashboard.disk') }}
               </button>
@@ -630,7 +400,8 @@ watch(activeNetworkInterfaces, (interfaces) => {
         </div>
 
         <div class="dashboard-monitor-pills mb-4 flex flex-wrap gap-2">
-          <div v-for="pill in monitoringPills" :key="pill.label" class="dashboard-monitor-pill rounded-md border px-3 py-2 text-sm"
+          <div v-for="pill in monitoringPills" :key="pill.label"
+            class="dashboard-monitor-pill rounded-md border px-3 py-2 text-sm"
             style="border-color: var(--glass-border); background: var(--glass);">
             <span style="color: var(--text-muted);">{{ pill.label }}:</span>
             <strong class="ml-2">{{ pill.value }}</strong>
@@ -644,13 +415,27 @@ watch(activeNetworkInterfaces, (interfaces) => {
           </span>
         </div>
 
-        <VChart class="dashboard-chart w-full" :option="monitoringChartOption" autoresize />
+        <VisXYContainer :data="chartData" :yDomain="[0, maxMetricValue]" class="dashboard-chart w-full">
+          <VisArea :x="chartX" :y="chartRightY" :color="metricSeries.rightColor" :opacity="0.24" :line="true"
+            :lineWidth="2.2" />
+          <VisArea :x="chartX" :y="chartLeftY" :color="metricSeries.leftColor" :opacity="0.22" :line="true"
+            :lineWidth="2.2" />
+          <VisAxis type="x" :tickFormat="xTickFormat" :numTicks="6" :gridLine="false" />
+          <VisAxis type="y" :label="metricSeries.unit" :numTicks="6" />
+          <VisTooltip :triggers="{ [VisAreaSelectors.area]: metricTooltip }" />
+        </VisXYContainer>
       </section>
     </div>
   </div>
 </template>
 
 <style scoped>
+.dashboard-chart {
+  display: block;
+  width: 100%;
+  height: 420px;
+}
+
 @media (max-width: 1280px) {
   .dashboard-view {
     gap: 18px;

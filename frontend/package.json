@@ -10,6 +10,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@unovis/ts": "^1.6.7",
+    "@unovis/vue": "^1.6.7",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "axios": "^1.13.6",
